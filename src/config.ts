@@ -5,6 +5,7 @@ export const APP_NAME = import.meta.env.VITE_APP_NAME ?? 'Волна';
 
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? '';
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
+export const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY ?? '';
 
 // Spec §5.6: server-enforced limits on message content and attachments.
 export const MAX_MESSAGE_LENGTH = 4000;

@@ -49,6 +49,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
     ensureMessageLoaded,
     send,
     sendAttachment,
+    sendGif,
     edit,
     remove,
     removeForMe,
@@ -135,6 +136,11 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
     setReplyTarget(null);
   }
 
+  async function handleSendGif(gifUrl: string, title: string) {
+    await sendGif(gifUrl, title, replyTarget?.id ?? null);
+    setReplyTarget(null);
+  }
+
   function handleReply(message: Message) {
     setEditingMessage(null);
     setReplyTarget(message);
@@ -176,15 +182,16 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
     setForwardTarget(null);
   }
 
-  // Search results can point at messages older than what's currently paged
-  // in. Mark the target as "pending" before loading so MessageList suppresses
-  // its own auto-scroll-to-bottom while ensureMessageLoaded prepends pages,
-  // then let it settle for a moment after the scroll-into-view + flash plays.
-  async function handleJumpToSearchResult(message: Message) {
-    setHighlightMessageId(message.id);
-    await ensureMessageLoaded(message.id);
+  // Used both by search results and by clicking a reply quote — either can
+  // point at a message older than what's currently paged in. Mark the target
+  // as "pending" before loading so MessageList suppresses its own
+  // auto-scroll-to-bottom while ensureMessageLoaded prepends pages, then let
+  // it settle for a moment after the scroll-into-view + flash plays.
+  async function handleJumpToMessage(messageId: string) {
+    setHighlightMessageId(messageId);
+    await ensureMessageLoaded(messageId);
     setTimeout(() => {
-      setHighlightMessageId((id) => (id === message.id ? null : id));
+      setHighlightMessageId((id) => (id === messageId ? null : id));
     }, 1600);
   }
 
@@ -226,7 +233,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
         <ChatSearchBar
           chatId={chat.id}
           currentUserId={currentUserId}
-          onJumpTo={(message) => void handleJumpToSearchResult(message)}
+          onJumpTo={(message) => void handleJumpToMessage(message.id)}
           onClose={() => setSearchOpen(false)}
         />
       )}
@@ -245,6 +252,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
         onEdit={handleEdit}
         onDelete={setDeleteTarget}
         onForward={setForwardTarget}
+        onJumpToMessage={(messageId) => void handleJumpToMessage(messageId)}
         highlightMessageId={highlightMessageId}
       />
 
@@ -253,6 +261,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
         onSendFile={handleSendFile}
         onSendVoice={handleSendVoice}
         onSendVideoNote={handleSendVideoNote}
+        onSendGif={handleSendGif}
         onTyping={notifyTyping}
         replyTarget={replyTarget}
         onCancelReply={() => setReplyTarget(null)}

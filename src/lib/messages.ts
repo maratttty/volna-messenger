@@ -146,6 +146,36 @@ export async function sendAttachmentMessage(params: {
   return data as Message;
 }
 
+// GIFs come from GIPHY's CDN — no upload to our own Storage, just point the
+// message at GIPHY's URL directly. Reuses the 'image' type since GIFs render
+// fine through the same <img> path (they animate natively in <img>).
+export async function sendGifMessage(params: {
+  chatId: string;
+  senderId: string;
+  clientId: string;
+  gifUrl: string;
+  title: string;
+  replyToId?: string | null;
+}): Promise<Message> {
+  const { data, error } = await supabase
+    .from('messages')
+    .insert({
+      chat_id: params.chatId,
+      sender_id: params.senderId,
+      type: 'image',
+      content: null,
+      attachment_url: params.gifUrl,
+      attachment_meta: { name: params.title, mime: 'image/gif' },
+      client_id: params.clientId,
+      reply_to_id: params.replyToId ?? null,
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return data as Message;
+}
+
 // Copies a message into another chat. Chains to the ORIGINAL sender/name even
 // when forwarding a message that was itself already forwarded, matching
 // Telegram's "Forwarded from X" behavior (never points at the last forwarder).

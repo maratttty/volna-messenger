@@ -4,6 +4,7 @@ import {
   fetchMessages,
   sendMessage as sendMessageApi,
   sendAttachmentMessage,
+  sendGifMessage,
   editMessage,
   deleteMessage,
   hideMessageForMe,
@@ -244,6 +245,40 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     [chatId, currentUserId, appendMessage],
   );
 
+  const sendGif = useCallback(
+    async (gifUrl: string, title: string, replyToId?: string | null) => {
+      if (!chatId || !currentUserId) return;
+      const clientId = crypto.randomUUID();
+
+      const optimistic: Message = {
+        id: `pending-${clientId}`,
+        client_id: clientId,
+        chat_id: chatId,
+        sender_id: currentUserId,
+        type: 'image',
+        content: null,
+        attachment_url: gifUrl,
+        attachment_meta: { name: title, mime: 'image/gif' },
+        reply_to_id: replyToId ?? null,
+        forwarded_from_id: null,
+        forwarded_from_name: null,
+        created_at: new Date().toISOString(),
+        edited_at: null,
+        deleted: false,
+      };
+      appendMessage(chatId, optimistic);
+
+      try {
+        const confirmed = await sendGifMessage({ chatId, senderId: currentUserId, clientId, gifUrl, title, replyToId });
+        useMessageStore.getState().confirmMessage(chatId, clientId, confirmed);
+      } catch (err) {
+        useMessageStore.getState().removeMessage(chatId, optimistic.id);
+        throw err;
+      }
+    },
+    [chatId, currentUserId, appendMessage],
+  );
+
   const edit = useCallback(async (messageId: string, content: string) => {
     await editMessage(messageId, content);
   }, []);
@@ -273,6 +308,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     ensureMessageLoaded,
     send,
     sendAttachment,
+    sendGif,
     edit,
     remove,
     removeForMe,

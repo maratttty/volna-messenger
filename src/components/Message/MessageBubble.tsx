@@ -17,6 +17,7 @@ interface MessageBubbleProps {
   onEdit: (message: Message) => void;
   onDelete: (message: Message) => void;
   onForward: (message: Message) => void;
+  onJumpToMessage: (messageId: string) => void;
 }
 
 function StatusTicks({ status }: { status?: MessageStatusValue }) {
@@ -107,6 +108,7 @@ export function MessageBubble({
   onEdit,
   onDelete,
   onForward,
+  onJumpToMessage,
 }: MessageBubbleProps) {
   const menu = useContextMenu();
 
@@ -151,10 +153,16 @@ export function MessageBubble({
           <p className="mb-0.5 text-xs font-medium text-accent">{senderName}</p>
         )}
         {message.reply_to_id && (
-          <div className="mb-1 rounded border-l-2 border-accent bg-black/10 px-2 py-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onJumpToMessage(message.reply_to_id!);
+            }}
+            className="mb-1 block w-full rounded border-l-2 border-accent bg-black/10 px-2 py-1 text-left transition hover:bg-black/20"
+          >
             <p className="truncate text-xs font-medium text-accent">{repliedSenderName ?? 'Сообщение'}</p>
             <p className="truncate text-xs text-text-muted">{repliedPreviewText(repliedMessage)}</p>
-          </div>
+          </button>
         )}
         <MessageContent message={message} />
         <div className={`mt-1 flex items-center justify-end gap-1 text-[11px] text-text-muted ${isVideoNote ? 'px-1' : ''}`}>

@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from 'react';
-import { Paperclip, Send, Pencil, Reply, X } from 'lucide-react';
+import { Paperclip, Send, Pencil, Reply, Smile, X } from 'lucide-react';
 import { MAX_MESSAGE_LENGTH } from '../../config';
 import { useAudioRecorder } from '../../hooks/useAudioRecorder';
 import { useVideoRecorder } from '../../hooks/useVideoRecorder';
 import { RecordButton, CANCEL_THRESHOLD_PX } from './RecordButton';
 import { RecordingBar } from './RecordingBar';
+import { EmojiGifPicker } from './EmojiGifPicker';
+import type { GifResult } from '../../lib/giphy';
 import type { Message } from '../../types/database';
 
 interface MessageInputProps {
@@ -12,6 +14,7 @@ interface MessageInputProps {
   onSendFile: (file: File) => Promise<void>;
   onSendVoice: (blob: Blob, durationSeconds: number) => Promise<void>;
   onSendVideoNote: (blob: Blob, durationSeconds: number, mimeType: string) => Promise<void>;
+  onSendGif: (gifUrl: string, title: string) => Promise<void>;
   onTyping: () => void;
   replyTarget: Message | null;
   onCancelReply: () => void;
@@ -26,6 +29,7 @@ export function MessageInput({
   onSendFile,
   onSendVoice,
   onSendVideoNote,
+  onSendGif,
   onTyping,
   replyTarget,
   onCancelReply,
@@ -40,8 +44,10 @@ export function MessageInput({
   const [mode, setMode] = useState<'voice' | 'video'>('voice');
   const [cancelProgress, setCancelProgress] = useState(0);
   const [locked, setLocked] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const lastTypingNotify = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const audio = useAudioRecorder();
   const video = useVideoRecorder();
@@ -103,6 +109,30 @@ export function MessageInput({
     }
   }
 
+  // Inserts at the cursor (not just appended) so picking an emoji mid-sentence
+  // lands where the user was typing, then restores focus + caret position.
+  function handleSelectEmoji(emoji: string) {
+    const el = textareaRef.current;
+    const start = el?.selectionStart ?? value.length;
+    const end = el?.selectionEnd ?? value.length;
+    const next = value.slice(0, start) + emoji + value.slice(end);
+    setValue(next);
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(start + emoji.length, start + emoji.length);
+    });
+  }
+
+  async function handleSelectGif(gif: GifResult) {
+    setPickerOpen(false);
+    setError(null);
+    try {
+      await onSendGif(gif.fullUrl, gif.title);
+    } catch {
+      setError('Не удалось отправить GIF');
+    }
+  }
+
   async function handleHoldStart() {
     setError(null);
     setCancelProgress(0);
@@ -161,7 +191,15 @@ export function MessageInput({
   const isRecording = active.isRecording;
 
   return (
-    <div className="border-t border-border bg-surface px-3 py-3">
+    <div className="relative border-t border-border bg-surface px-3 py-3">
+      {pickerOpen && (
+        <EmojiGifPicker
+          onSelectEmoji={handleSelectEmoji}
+          onSelectGif={(gif) => void handleSelectGif(gif)}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
       {(error || audio.error || video.error) && (
         <p className="mb-2 text-xs text-red-400">{error ?? audio.error ?? video.error}</p>
       )}
@@ -211,6 +249,15 @@ export function MessageInput({
             >
               <Paperclip size={20} />
             </button>
+            <button
+              onClick={() => setPickerOpen((open) => !open)}
+              title="Эмодзи и GIF"
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition hover:bg-surface-hover ${
+                pickerOpen ? 'text-accent' : 'text-text-muted hover:text-text'
+              }`}
+            >
+              <Smile size={20} />
+            </button>
           </>
         )}
 
@@ -229,6 +276,7 @@ export function MessageInput({
           </div>
         ) : (
           <textarea
+            ref={textareaRef}
             value={value}
             onChange={handleChange}
             onKeyDown={handleKeyDown}

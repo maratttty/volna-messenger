@@ -17,6 +17,7 @@ interface MessageListProps {
   onEdit: (message: Message) => void;
   onDelete: (message: Message) => void;
   onForward: (message: Message) => void;
+  onJumpToMessage: (messageId: string) => void;
   highlightMessageId?: string | null;
 }
 
@@ -34,6 +35,7 @@ export function MessageList({
   onEdit,
   onDelete,
   onForward,
+  onJumpToMessage,
   highlightMessageId,
 }: MessageListProps) {
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
@@ -153,6 +155,7 @@ export function MessageList({
               onEdit={onEdit}
               onDelete={onDelete}
               onForward={onForward}
+              onJumpToMessage={onJumpToMessage}
             />
           </div>
         );
