@@ -6,11 +6,13 @@ import {
   sendAttachmentMessage,
   editMessage,
   deleteMessage,
+  hideMessageForMe,
   markChatRead,
   markMessageRead,
   fetchOwnMessageStatuses,
 } from '../lib/messages';
 import { uploadAttachment } from '../lib/storage';
+import { onNetworkRecovery } from '../lib/network';
 import { useMessageStore } from '../store/message-store';
 import type { Message, MessageStatusValue, MessageType } from '../types/database';
 
@@ -35,7 +37,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     let cancelled = false;
 
     setLoading(true);
-    fetchMessages(chatId)
+    fetchMessages(chatId, currentUserId)
       .then(({ messages: page, hasMore: more }) => {
         if (cancelled) return;
         setMessages(chatId, page, more);
@@ -43,6 +45,26 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         void refreshStatuses(page);
       })
       .finally(() => !cancelled && setLoading(false));
+
+    // Re-fetches the latest page and merges anything missing into the
+    // already-loaded history (sorted, deduped) — postgres_changes doesn't
+    // replay events missed while disconnected, so this is the only way to
+    // catch up after a dropped connection.
+    async function catchUp() {
+      if (cancelled || !chatId || !currentUserId) return;
+      const { messages: page } = await fetchMessages(chatId, currentUserId);
+      const existing = useMessageStore.getState().messages[chatId] ?? [];
+      const merged = [...existing];
+      for (const msg of page) {
+        if (!merged.some((m) => m.id === msg.id)) merged.push(msg);
+      }
+      merged.sort((a, b) => a.created_at.localeCompare(b.created_at));
+      setMessages(chatId, merged, useMessageStore.getState().hasMore[chatId] ?? false);
+      void markChatRead(chatId, currentUserId);
+      void refreshStatuses(merged);
+    }
+
+    let everConnected = false;
 
     // Unique-per-mount topic name: React StrictMode double-invokes effects in
     // dev (mount → cleanup → mount), and reusing the same topic name can race
@@ -79,26 +101,34 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
           });
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Skip the very first SUBSCRIBED (the initial fetch above already
+        // covers it) — only catch up on a SUBSCRIBED that follows a drop.
+        if (status === 'SUBSCRIBED' && everConnected) void catchUp();
+        if (status === 'SUBSCRIBED') everConnected = true;
+      });
+
+    const stopWatchingRecovery = onNetworkRecovery(() => void catchUp());
 
     return () => {
       cancelled = true;
+      stopWatchingRecovery();
       void supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId, currentUserId]);
 
   const loadMore = useCallback(async () => {
-    if (!chatId || loadingMore || !chatHasMore || chatMessages.length === 0) return;
+    if (!chatId || !currentUserId || loadingMore || !chatHasMore || chatMessages.length === 0) return;
     setLoadingMore(true);
     try {
       const oldest = chatMessages[0].created_at;
-      const { messages: page, hasMore: more } = await fetchMessages(chatId, oldest);
+      const { messages: page, hasMore: more } = await fetchMessages(chatId, currentUserId, oldest);
       prependMessages(chatId, page, more);
     } finally {
       setLoadingMore(false);
     }
-  }, [chatId, chatHasMore, chatMessages, loadingMore, prependMessages]);
+  }, [chatId, currentUserId, chatHasMore, chatMessages, loadingMore, prependMessages]);
 
   // Search results can point at messages older than what's currently paged
   // in. Reads the pagination cursor fresh from the store on every loop turn
@@ -107,7 +137,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
   // forever if called repeatedly without a re-render in between.
   const ensureMessageLoaded = useCallback(
     async (messageId: string) => {
-      if (!chatId || loadingMore) return;
+      if (!chatId || !currentUserId || loadingMore) return;
       if ((useMessageStore.getState().messages[chatId] ?? []).some((m) => m.id === messageId)) return;
 
       setLoadingMore(true);
@@ -118,7 +148,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
           if (!useMessageStore.getState().hasMore[chatId] || current.length === 0) return;
 
           const oldest = current[0].created_at;
-          const { messages: page, hasMore: more } = await fetchMessages(chatId, oldest);
+          const { messages: page, hasMore: more } = await fetchMessages(chatId, currentUserId, oldest);
           if (page.length === 0) return;
           prependMessages(chatId, page, more);
         }
@@ -126,7 +156,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         setLoadingMore(false);
       }
     },
-    [chatId, loadingMore, prependMessages],
+    [chatId, currentUserId, loadingMore, prependMessages],
   );
 
   const pendingClientIds = useRef(new Set<string>());
@@ -222,6 +252,18 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     await deleteMessage(messageId);
   }, []);
 
+  // "Delete for me" — hides the message only in this user's view, no
+  // realtime event involved (it's a private per-user list, not a row change
+  // other members can see), so the store update has to happen locally here.
+  const removeForMe = useCallback(
+    async (messageId: string) => {
+      if (!chatId || !currentUserId) return;
+      await hideMessageForMe(messageId, chatId, currentUserId);
+      useMessageStore.getState().removeMessage(chatId, messageId);
+    },
+    [chatId, currentUserId],
+  );
+
   return {
     messages: chatMessages,
     hasMore: chatHasMore,
@@ -233,6 +275,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     sendAttachment,
     edit,
     remove,
+    removeForMe,
     statuses,
   };
 }

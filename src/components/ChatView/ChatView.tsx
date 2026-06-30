@@ -51,6 +51,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
     sendAttachment,
     edit,
     remove,
+    removeForMe,
     statuses,
   } = useMessages(chat.id, currentUserId);
   const { typingUsers, notifyTyping } = useTyping(chat.id, currentUserId, currentUserDisplayName);
@@ -150,7 +151,13 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
     setEditingMessage(null);
   }
 
-  async function handleConfirmDelete() {
+  async function handleDeleteForMe() {
+    if (!deleteTarget) return;
+    await removeForMe(deleteTarget.id);
+    setDeleteTarget(null);
+  }
+
+  async function handleDeleteForEveryone() {
     if (!deleteTarget) return;
     await remove(deleteTarget.id);
     setDeleteTarget(null);
@@ -218,6 +225,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
       {searchOpen && (
         <ChatSearchBar
           chatId={chat.id}
+          currentUserId={currentUserId}
           onJumpTo={(message) => void handleJumpToSearchResult(message)}
           onClose={() => setSearchOpen(false)}
         />
@@ -255,7 +263,12 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
       />
 
       {deleteTarget && (
-        <ConfirmDeleteModal onConfirm={() => void handleConfirmDelete()} onClose={() => setDeleteTarget(null)} />
+        <ConfirmDeleteModal
+          isOwn={deleteTarget.sender_id === currentUserId}
+          onDeleteForMe={() => void handleDeleteForMe()}
+          onDeleteForEveryone={() => void handleDeleteForEveryone()}
+          onClose={() => setDeleteTarget(null)}
+        />
       )}
 
       {forwardTarget && (
@@ -269,6 +282,8 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
       {membersOpen && (
         <GroupMembersPanel
           chatId={chat.id}
+          chatTitle={chat.title ?? 'Группа'}
+          chatAvatarUrl={chat.avatar_url}
           members={members}
           currentUserId={currentUserId}
           myRole={chat.myRole}

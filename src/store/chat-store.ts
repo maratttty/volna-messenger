@@ -9,6 +9,8 @@ interface ChatStore {
   upsertChat: (chat: ChatWithMeta) => void;
   setActiveChatId: (id: string | null) => void;
   markRead: (chatId: string, messageId: string) => void;
+  setMuted: (chatId: string, muted: boolean) => void;
+  patchChat: (chatId: string, patch: Partial<ChatWithMeta>) => void;
 }
 
 export const useChatStore = create<ChatStore>((set) => ({
@@ -39,5 +41,15 @@ export const useChatStore = create<ChatStore>((set) => ({
       chats: state.chats.map((c) =>
         c.id === chatId ? { ...c, unreadCount: 0, myMember: { ...c, last_read_message_id: messageId } } : c,
       ),
+    })),
+
+  setMuted: (chatId, muted) =>
+    set((state) => ({
+      chats: state.chats.map((c) => (c.id === chatId ? { ...c, muted } : c)),
+    })),
+
+  patchChat: (chatId, patch) =>
+    set((state) => ({
+      chats: state.chats.map((c) => (c.id === chatId ? { ...c, ...patch } : c)),
     })),
 }));

@@ -6,6 +6,7 @@ import type { Message } from '../../types/database';
 
 interface ChatSearchBarProps {
   chatId: string;
+  currentUserId: string;
   onJumpTo: (message: Message) => void;
   onClose: () => void;
 }
@@ -26,7 +27,7 @@ function snippet(message: Message): string {
   }
 }
 
-export function ChatSearchBar({ chatId, onJumpTo, onClose }: ChatSearchBarProps) {
+export function ChatSearchBar({ chatId, currentUserId, onJumpTo, onClose }: ChatSearchBarProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -47,7 +48,7 @@ export function ChatSearchBar({ chatId, onJumpTo, onClose }: ChatSearchBarProps)
     let cancelled = false;
     setLoading(true);
     const timer = setTimeout(() => {
-      searchMessagesInChat(chatId, trimmed)
+      searchMessagesInChat(chatId, currentUserId, trimmed)
         .then((found) => !cancelled && setResults(found))
         .catch(() => !cancelled && setResults([]))
         .finally(() => !cancelled && setLoading(false));
@@ -56,7 +57,7 @@ export function ChatSearchBar({ chatId, onJumpTo, onClose }: ChatSearchBarProps)
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [chatId, query]);
+  }, [chatId, currentUserId, query]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Escape') onClose();

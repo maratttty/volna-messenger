@@ -121,7 +121,6 @@ export function MessageBubble({
   const isPending = message.id.startsWith('pending-');
   const isVideoNote = message.type === 'video_note';
   const canEdit = isOwn && message.type === 'text' && !message.deleted;
-  const canDelete = isOwn && !message.deleted;
   const canActOn = !message.deleted && !isPending;
 
   const menuItems: ContextMenuItem[] = canActOn
@@ -129,7 +128,7 @@ export function MessageBubble({
         { label: 'Ответить', icon: Reply, onClick: () => onReply(message) },
         ...(canEdit ? [{ label: 'Редактировать', icon: Pencil, onClick: () => onEdit(message) }] : []),
         { label: 'Переслать', icon: Forward, onClick: () => onForward(message) },
-        ...(canDelete ? [{ label: 'Удалить', icon: Trash2, onClick: () => onDelete(message), danger: true }] : []),
+        { label: 'Удалить', icon: Trash2, onClick: () => onDelete(message), danger: true },
       ]
     : [];
 

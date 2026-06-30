@@ -84,6 +84,7 @@ export function ChatList({ chats, activeChatId, onSelect, loading, currentUserId
                 key={chat.id}
                 chat={chat}
                 active={chat.id === activeChatId}
+                currentUserId={currentUserId}
                 onClick={() => onSelect(chat.id)}
               />
             ))}

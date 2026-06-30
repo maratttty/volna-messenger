@@ -6,6 +6,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import SetupProfile from './pages/SetupProfile';
 import ChatPage from './pages/ChatPage';
 import InvitePage from './pages/InvitePage';
+import Settings from './pages/Settings';
 
 export default function App() {
   return (
@@ -27,6 +28,14 @@ export default function App() {
         element={
           <RequireAuth>
             <InvitePage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <RequireAuth>
+            <Settings />
           </RequireAuth>
         }
       />

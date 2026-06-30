@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { UsersRound } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Bell, UsersRound, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useChats } from '../hooks/useChats';
 import { useChatStore } from '../store/chat-store';
@@ -8,12 +9,24 @@ import { ChatView } from '../components/ChatView/ChatView';
 import { NewGroupModal } from '../components/ChatList/NewGroupModal';
 import { Avatar } from '../components/ui/Avatar';
 import { APP_NAME } from '../config';
+import { getNotificationPermission, isNotificationSupported, requestNotificationPermission } from '../lib/notifications';
 
 export default function ChatPage() {
   const { session, profile, signOut } = useAuth();
+  const navigate = useNavigate();
   const { chats, loading, reload } = useChats();
   const { activeChatId, setActiveChatId } = useChatStore();
   const [showNewGroup, setShowNewGroup] = useState(false);
+  const [notifPermission, setNotifPermission] = useState(getNotificationPermission());
+  const [notifDismissed, setNotifDismissed] = useState(false);
+
+  async function handleEnableNotifications() {
+    const result = await requestNotificationPermission();
+    setNotifPermission(result);
+  }
+
+  const showNotifBanner =
+    isNotificationSupported() && notifPermission === 'default' && !notifDismissed;
 
   const activeChat = chats.find((c) => c.id === activeChatId);
 
@@ -46,6 +59,26 @@ export default function ChatPage() {
           </div>
         </div>
 
+        {showNotifBanner && (
+          <div className="flex items-center gap-2 border-b border-border bg-surface-hover px-3 py-2 text-xs text-text">
+            <Bell size={14} className="shrink-0 text-accent" />
+            <span className="flex-1">Включить уведомления о новых сообщениях?</span>
+            <button
+              onClick={() => void handleEnableNotifications()}
+              className="shrink-0 rounded-md bg-accent px-2 py-1 font-medium text-bg transition hover:bg-accent-hover"
+            >
+              Включить
+            </button>
+            <button
+              onClick={() => setNotifDismissed(true)}
+              title="Не сейчас"
+              className="shrink-0 rounded-md p-1 text-text-muted transition hover:bg-surface hover:text-text"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
         <div className="flex-1 overflow-hidden">
           {session && (
             <ChatList
@@ -58,13 +91,16 @@ export default function ChatPage() {
           )}
         </div>
 
-        <div className="flex items-center gap-3 border-t border-border px-4 py-3">
+        <button
+          onClick={() => navigate('/settings')}
+          className="flex items-center gap-3 border-t border-border px-4 py-3 text-left transition hover:bg-surface-hover"
+        >
           <Avatar name={profile?.display_name ?? ''} src={profile?.avatar_url} size="md" />
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-text">{profile?.display_name}</p>
             <p className="truncate text-xs text-text-muted">@{profile?.username}</p>
           </div>
-        </div>
+        </button>
       </aside>
 
       {/* Main content */}

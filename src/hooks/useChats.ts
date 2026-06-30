@@ -2,9 +2,19 @@ import { useEffect, useCallback, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { fetchChats } from '../lib/chats';
 import { markMessageDelivered } from '../lib/messages';
+import { showMessageNotification } from '../lib/notifications';
+import { onNetworkRecovery } from '../lib/network';
 import { useChatStore } from '../store/chat-store';
 import { useAuth } from '../contexts/AuthContext';
-import type { Message } from '../types/database';
+import type { ChatWithMeta, Message } from '../types/database';
+
+// Suppressed only when this exact chat is both the open one AND the tab is
+// actually visible — a background tab on the active chat still needs to alert.
+function shouldNotify(chat: ChatWithMeta, message: Message, userId: string): boolean {
+  if (message.sender_id === userId || chat.muted) return false;
+  const isFocusedOnThisChat = useChatStore.getState().activeChatId === chat.id && !document.hidden;
+  return !isFocusedOnThisChat;
+}
 
 export function useChats() {
   const { session } = useAuth();
@@ -23,6 +33,8 @@ export function useChats() {
 
     setLoading(true);
     void reload().finally(() => setLoading(false));
+
+    let everConnected = false;
 
     // Realtime: listen for new/updated messages in any of the user's chats.
     // When something changes we re-fetch only the affected chat so the list
@@ -50,6 +62,14 @@ export function useChats() {
             if (newMessage.sender_id !== userId) {
               void markMessageDelivered(newMessage.id, userId);
             }
+            if (shouldNotify(updated, newMessage, userId)) {
+              const title = updated.type === 'direct' ? updated.otherUser?.display_name ?? 'Сообщение' : updated.title ?? 'Группа';
+              showMessageNotification({
+                title,
+                message: newMessage,
+                onClick: () => useChatStore.getState().setActiveChatId(updated.id),
+              });
+            }
           } else {
             void reload(); // chat membership changed
           }
@@ -75,9 +95,18 @@ export function useChats() {
         },
         () => void reload(), // removed from a group
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Skip the initial SUBSCRIBED (already covered by the reload() call
+        // above) — only re-sync on a SUBSCRIBED that follows a drop, since
+        // postgres_changes doesn't replay whatever happened while disconnected.
+        if (status === 'SUBSCRIBED' && everConnected) void reload();
+        if (status === 'SUBSCRIBED') everConnected = true;
+      });
+
+    const stopWatchingRecovery = onNetworkRecovery(() => void reload());
 
     return () => {
+      stopWatchingRecovery();
       void supabase.removeChannel(channel);
     };
   }, [userId, reload, upsertChat]);

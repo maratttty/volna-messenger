@@ -95,6 +95,7 @@ export async function fetchChats(userId: string): Promise<ChatWithMeta[]> {
         lastMessage,
         unreadCount,
         myRole: membership?.role ?? 'member',
+        muted: membership?.muted ?? false,
       } as ChatWithMeta;
     }),
   );
@@ -230,6 +231,31 @@ export async function updateMemberRole(chatId: string, userId: string, role: Mem
 
 export async function removeMember(chatId: string, userId: string): Promise<void> {
   const { error } = await supabase.from('chat_members').delete().eq('chat_id', chatId).eq('user_id', userId);
+  if (error) throw error;
+}
+
+// Group title/avatar — RLS restricts this to owners/admins
+// ("owners and admins can update chat").
+export async function updateChatInfo(
+  chatId: string,
+  fields: { title?: string; avatarUrl?: string },
+): Promise<void> {
+  const update: Record<string, string> = {};
+  if (fields.title !== undefined) update.title = fields.title.trim();
+  if (fields.avatarUrl !== undefined) update.avatar_url = fields.avatarUrl;
+
+  const { error } = await supabase.from('chats').update(update).eq('id', chatId);
+  if (error) throw error;
+}
+
+// Mute affects only the caller's own membership row — RLS lets a member
+// update their own row (see "members can update their own membership row").
+export async function setChatMuted(chatId: string, userId: string, muted: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('chat_members')
+    .update({ muted })
+    .eq('chat_id', chatId)
+    .eq('user_id', userId);
   if (error) throw error;
 }
 

@@ -5,12 +5,28 @@ import type { UploadResult } from './storage';
 
 const PAGE_SIZE = 30;
 
+// Message ids this user has hidden for themself in this chat ("delete for
+// me" — see message_hidden_for_user). Small per-chat list in practice, so a
+// plain id-exclusion filter on the messages query is fine for MVP scale.
+async function fetchHiddenMessageIds(chatId: string, userId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('message_hidden_for_user')
+    .select('message_id')
+    .eq('chat_id', chatId)
+    .eq('user_id', userId);
+  if (error) throw error;
+  return (data ?? []).map((r: { message_id: string }) => r.message_id);
+}
+
 // Cursor-based pagination: fetch messages older than `before` (or the most
 // recent page if `before` is omitted), returned oldest-first for rendering.
 export async function fetchMessages(
   chatId: string,
+  userId: string,
   before?: string,
 ): Promise<{ messages: Message[]; hasMore: boolean }> {
+  const hiddenIds = await fetchHiddenMessageIds(chatId, userId);
+
   let query = supabase
     .from('messages')
     .select('*')
@@ -19,6 +35,7 @@ export async function fetchMessages(
     .limit(PAGE_SIZE + 1);
 
   if (before) query = query.lt('created_at', before);
+  if (hiddenIds.length > 0) query = query.not('id', 'in', `(${hiddenIds.join(',')})`);
 
   const { data, error } = await query;
   if (error) throw error;
@@ -33,11 +50,13 @@ export async function fetchMessages(
 // Full-text search within one chat, using the generated search_vector column
 // (russian to_tsvector). websearch_to_tsquery tolerates natural typed input
 // (quotes, "-exclude", etc.) better than a raw plainto_tsquery.
-export async function searchMessagesInChat(chatId: string, query: string): Promise<Message[]> {
+export async function searchMessagesInChat(chatId: string, userId: string, query: string): Promise<Message[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  const { data, error } = await supabase
+  const hiddenIds = await fetchHiddenMessageIds(chatId, userId);
+
+  let q = supabase
     .from('messages')
     .select('*')
     .eq('chat_id', chatId)
@@ -46,8 +65,25 @@ export async function searchMessagesInChat(chatId: string, query: string): Promi
     .order('created_at', { ascending: false })
     .limit(50);
 
+  if (hiddenIds.length > 0) q = q.not('id', 'in', `(${hiddenIds.join(',')})`);
+
+  const { data, error } = await q;
   if (error) throw error;
   return (data ?? []) as Message[];
+}
+
+// "Delete for me": hides one message from this user's own view only. Other
+// participants (including the sender) are unaffected — contrast with
+// deleteMessage(), which is "delete for everyone" and RLS-restricted to the
+// sender.
+export async function hideMessageForMe(messageId: string, chatId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('message_hidden_for_user')
+    .upsert(
+      { message_id: messageId, chat_id: chatId, user_id: userId },
+      { onConflict: 'message_id,user_id' },
+    );
+  if (error) throw error;
 }
 
 export async function sendMessage(params: {

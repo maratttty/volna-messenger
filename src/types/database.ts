@@ -102,6 +102,7 @@ export interface ChatWithMeta extends Chat {
   lastMessage?: Message;
   unreadCount: number;
   myRole: MemberRole;
+  muted: boolean;
 }
 
 export interface Database {

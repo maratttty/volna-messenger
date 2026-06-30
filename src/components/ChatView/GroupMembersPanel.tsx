@@ -1,12 +1,16 @@
-import { useState } from 'react';
-import { Crown, Shield, X, LogOut, Link as LinkIcon, Check } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Crown, Shield, X, LogOut, Link as LinkIcon, Check, Camera } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
 import type { MemberWithProfile, MemberRole } from '../../types/database';
-import { updateMemberRole, removeMember, getOrCreateInvite, postSystemMessage } from '../../lib/chats';
+import { updateMemberRole, removeMember, getOrCreateInvite, postSystemMessage, updateChatInfo } from '../../lib/chats';
+import { uploadAttachment } from '../../lib/storage';
+import { useChatStore } from '../../store/chat-store';
 
 interface GroupMembersPanelProps {
   chatId: string;
+  chatTitle: string;
+  chatAvatarUrl: string | null;
   members: MemberWithProfile[];
   currentUserId: string;
   myRole: MemberRole;
@@ -23,6 +27,8 @@ function roleLabel(role: MemberRole): string {
 
 export function GroupMembersPanel({
   chatId,
+  chatTitle,
+  chatAvatarUrl,
   members,
   currentUserId,
   myRole,
@@ -34,8 +40,45 @@ export function GroupMembersPanel({
   const [copied, setCopied] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [title, setTitle] = useState(chatTitle);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(chatAvatarUrl);
+  const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
+  const [savingInfo, setSavingInfo] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const canManage = myRole === 'owner' || myRole === 'admin';
+  const titleDirty = title.trim() !== chatTitle || pendingAvatarFile !== null;
+
+  function handleAvatarPick(file: File | undefined) {
+    if (!file) return;
+    setPendingAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  }
+
+  async function handleSaveGroupInfo() {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    setSavingInfo(true);
+    setError(null);
+    try {
+      let avatarUrl = chatAvatarUrl ?? undefined;
+      if (pendingAvatarFile) {
+        const uploaded = await uploadAttachment('avatars', currentUserId, pendingAvatarFile);
+        avatarUrl = uploaded.url;
+      }
+      await updateChatInfo(chatId, { title: trimmed, avatarUrl });
+      useChatStore.getState().patchChat(chatId, { title: trimmed, avatar_url: avatarUrl ?? null });
+      if (trimmed !== chatTitle) {
+        await postSystemMessage(chatId, currentUserId, `Название группы изменено на «${trimmed}»`);
+      }
+      setPendingAvatarFile(null);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось сохранить');
+    } finally {
+      setSavingInfo(false);
+    }
+  }
 
   async function handleGetInviteLink() {
     setError(null);
@@ -106,6 +149,39 @@ export function GroupMembersPanel({
   return (
     <Modal title={`Участники (${members.length})`} onClose={onClose}>
       <div className="flex flex-col gap-3">
+        {canManage && (
+          <div className="flex items-center gap-3">
+            <button onClick={() => avatarInputRef.current?.click()} className="group relative shrink-0">
+              <Avatar name={title || 'Группа'} src={avatarPreview} />
+              <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition group-hover:opacity-100">
+                <Camera size={14} className="text-white" />
+              </span>
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handleAvatarPick(e.target.files?.[0])}
+            />
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={64}
+              className="flex-1 rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
+            />
+            {titleDirty && (
+              <button
+                onClick={() => void handleSaveGroupInfo()}
+                disabled={savingInfo || !title.trim()}
+                className="shrink-0 rounded-lg bg-accent px-3 py-2 text-xs font-medium text-bg transition hover:bg-accent-hover disabled:opacity-50"
+              >
+                {savingInfo ? 'Сохраняем…' : 'Сохранить'}
+              </button>
+            )}
+          </div>
+        )}
+
         {canManage && (
           <div className="rounded-lg bg-bg px-3 py-2">
             {inviteLink ? (
