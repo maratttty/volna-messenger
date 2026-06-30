@@ -1,7 +1,6 @@
 // Central place for runtime configuration. The product name is intentionally
-// a config value (env var with fallback) rather than hardcoded — the working
-// title "Волна" is expected to change.
-export const APP_NAME = import.meta.env.VITE_APP_NAME ?? 'Волна';
+// a config value (env var with fallback) rather than hardcoded.
+export const APP_NAME = import.meta.env.VITE_APP_NAME ?? 'Freeword';
 
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? '';
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
