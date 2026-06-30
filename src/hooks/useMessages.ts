@@ -14,8 +14,9 @@ import {
 } from '../lib/messages';
 import { uploadAttachment } from '../lib/storage';
 import { onNetworkRecovery } from '../lib/network';
+import { fetchReactions, groupReactions, setReaction, removeReaction } from '../lib/reactions';
 import { useMessageStore } from '../store/message-store';
-import type { Message, MessageStatusValue, MessageType } from '../types/database';
+import type { Message, MessageStatusValue, MessageType, ReactionSummary } from '../types/database';
 
 export function useMessages(chatId: string | null, currentUserId: string | undefined) {
   const { messages, hasMore, setMessages, prependMessages, appendMessage, updateMessage } =
@@ -23,6 +24,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [statuses, setStatuses] = useState<Map<string, MessageStatusValue>>(new Map());
+  const [reactions, setReactions] = useState<Map<string, ReactionSummary[]>>(new Map());
   const chatMessages = chatId ? messages[chatId] ?? [] : [];
   const chatHasMore = chatId ? hasMore[chatId] ?? false : false;
 
@@ -32,6 +34,29 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     const map = await fetchOwnMessageStatuses(ownIds);
     setStatuses(map);
   }, [currentUserId]);
+
+  const refreshReactions = useCallback(async (msgs: Message[]) => {
+    if (!currentUserId || msgs.length === 0) return;
+    const rows = await fetchReactions(msgs.map((m) => m.id));
+    setReactions(groupReactions(rows, currentUserId));
+  }, [currentUserId]);
+
+  // A single reaction changed — cheaper than re-fetching the whole chat's
+  // reactions, and correct even for messages outside the currently loaded page.
+  const refreshReactionsForMessage = useCallback(
+    async (messageId: string) => {
+      if (!currentUserId) return;
+      const rows = await fetchReactions([messageId]);
+      const grouped = groupReactions(rows, currentUserId).get(messageId) ?? [];
+      setReactions((prev) => {
+        const next = new Map(prev);
+        if (grouped.length === 0) next.delete(messageId);
+        else next.set(messageId, grouped);
+        return next;
+      });
+    },
+    [currentUserId],
+  );
 
   useEffect(() => {
     if (!chatId || !currentUserId) return;
@@ -44,6 +69,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         setMessages(chatId, page, more);
         void markChatRead(chatId, currentUserId);
         void refreshStatuses(page);
+        void refreshReactions(page);
       })
       .finally(() => !cancelled && setLoading(false));
 
@@ -63,6 +89,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       setMessages(chatId, merged, useMessageStore.getState().hasMore[chatId] ?? false);
       void markChatRead(chatId, currentUserId);
       void refreshStatuses(merged);
+      void refreshReactions(merged);
     }
 
     let everConnected = false;
@@ -100,6 +127,15 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
             if (!existing || row.status === 'read') next.set(row.message_id, row.status);
             return next;
           });
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'message_reactions' },
+        (payload) => {
+          const row = (payload.new ?? payload.old) as { message_id: string } | null;
+          if (!row) return;
+          void refreshReactionsForMessage(row.message_id);
         },
       )
       .subscribe((status) => {
@@ -299,6 +335,51 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     [chatId, currentUserId],
   );
 
+  // Tapping the emoji you already reacted with removes it; tapping a
+  // different one replaces it (one reaction per user per message). Updates
+  // optimistically so the tap feels instant — the realtime listener above
+  // reconciles with the server shortly after regardless.
+  const toggleReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      if (!currentUserId) return;
+      const current = reactions.get(messageId) ?? [];
+      const mine = current.find((r) => r.reactedByMe);
+      const isUnreact = mine?.emoji === emoji;
+
+      setReactions((prev) => {
+        const next = new Map(prev);
+        const summaries = (next.get(messageId) ?? []).map((r) => ({ ...r }));
+        if (mine) {
+          const idx = summaries.findIndex((r) => r.emoji === mine.emoji);
+          if (idx !== -1) {
+            summaries[idx].count -= 1;
+            summaries[idx].reactedByMe = false;
+            if (summaries[idx].count <= 0) summaries.splice(idx, 1);
+          }
+        }
+        if (!isUnreact) {
+          const idx = summaries.findIndex((r) => r.emoji === emoji);
+          if (idx !== -1) {
+            summaries[idx].count += 1;
+            summaries[idx].reactedByMe = true;
+          } else {
+            summaries.push({ emoji, count: 1, reactedByMe: true });
+          }
+        }
+        next.set(messageId, summaries);
+        return next;
+      });
+
+      try {
+        if (isUnreact) await removeReaction(messageId, currentUserId);
+        else await setReaction(messageId, currentUserId, emoji);
+      } catch {
+        void refreshReactionsForMessage(messageId);
+      }
+    },
+    [currentUserId, reactions, refreshReactionsForMessage],
+  );
+
   return {
     messages: chatMessages,
     hasMore: chatHasMore,
@@ -313,5 +394,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     remove,
     removeForMe,
     statuses,
+    reactions,
+    toggleReaction,
   };
 }

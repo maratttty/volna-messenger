@@ -248,6 +248,19 @@ export async function updateChatInfo(
   if (error) throw error;
 }
 
+// Goes through RPCs (any member can pin, unlike title/avatar which is
+// owner/admin-only) — see supabase/add_pinned_message.sql for why this can't
+// just be a second UPDATE policy on `chats`.
+export async function pinMessage(chatId: string, messageId: string): Promise<void> {
+  const { error } = await supabase.rpc('pin_message', { p_chat_id: chatId, p_message_id: messageId });
+  if (error) throw error;
+}
+
+export async function unpinMessage(chatId: string): Promise<void> {
+  const { error } = await supabase.rpc('unpin_message', { p_chat_id: chatId });
+  if (error) throw error;
+}
+
 // Mute affects only the caller's own membership row — RLS lets a member
 // update their own row (see "members can update their own membership row").
 export async function setChatMuted(chatId: string, userId: string, muted: boolean): Promise<void> {

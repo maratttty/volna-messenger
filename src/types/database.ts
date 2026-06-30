@@ -24,6 +24,7 @@ export interface Chat {
   avatar_url: string | null;
   created_by: string | null;
   created_at: string;
+  pinned_message_id: string | null;
 }
 
 export interface ChatMember {
@@ -80,6 +81,20 @@ export interface MessageStatus {
   updated_at: string;
 }
 
+export interface MessageReaction {
+  message_id: string;
+  user_id: string;
+  emoji: string;
+  created_at: string;
+}
+
+// Aggregated for display: one entry per distinct emoji present on a message.
+export interface ReactionSummary {
+  emoji: string;
+  count: number;
+  reactedByMe: boolean;
+}
+
 export interface Story {
   id: string;
   author_id: string;
@@ -115,6 +130,7 @@ export interface Database {
       invites: { Row: { id: string; chat_id: string; token: string; created_by: string | null; expires_at: string | null; revoked: boolean; created_at: string }; Insert: Record<string, unknown>; Update: Record<string, unknown> };
       messages: { Row: Message; Insert: Partial<Message> & { chat_id: string; sender_id: string }; Update: Partial<Message> };
       message_status: { Row: MessageStatus; Insert: MessageStatus; Update: Partial<MessageStatus> };
+      message_reactions: { Row: MessageReaction; Insert: MessageReaction; Update: Partial<MessageReaction> };
       stories: { Row: Story; Insert: Partial<Story> & { author_id: string; media_url: string; media_type: 'image' | 'video' }; Update: Partial<Story> };
       story_views: { Row: StoryView; Insert: StoryView; Update: never };
     };

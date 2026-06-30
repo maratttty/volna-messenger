@@ -13,11 +13,15 @@ interface ContextMenuProps {
   y: number;
   items: ContextMenuItem[];
   onClose: () => void;
+  // Optional horizontal row of quick-pick emoji shown above the item list
+  // (Telegram/WhatsApp-style reaction bar on long-press/right-click).
+  quickReactions?: string[];
+  onQuickReact?: (emoji: string) => void;
 }
 
 const MARGIN = 8;
 
-export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
+export function ContextMenu({ x, y, items, onClose, quickReactions, onQuickReact }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number; visible: boolean }>({
     left: x,
@@ -59,6 +63,22 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
         className="fixed min-w-[180px] overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
+        {quickReactions && quickReactions.length > 0 && (
+          <div className="flex items-center gap-0.5 border-b border-border px-1.5 py-1.5">
+            {quickReactions.map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => {
+                  onQuickReact?.(emoji);
+                  onClose();
+                }}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg transition hover:bg-surface-hover hover:scale-110"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
         {items.map((item) => (
           <button
             key={item.label}

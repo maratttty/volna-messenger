@@ -1,10 +1,12 @@
-import { Paperclip, Reply, Pencil, Trash2, Forward } from 'lucide-react';
-import type { Message, MessageStatusValue } from '../../types/database';
+import { Paperclip, Reply, Pencil, Trash2, Forward, Pin, PinOff } from 'lucide-react';
+import type { Message, MessageStatusValue, ReactionSummary } from '../../types/database';
 import { formatMessageTime } from '../../lib/time';
 import { AudioPlayer } from './AudioPlayer';
 import { VideoNotePlayer } from './VideoNotePlayer';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu';
+
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 interface MessageBubbleProps {
   message: Message;
@@ -13,11 +15,15 @@ interface MessageBubbleProps {
   senderName?: string;
   repliedMessage?: Message;
   repliedSenderName?: string;
+  reactions?: ReactionSummary[];
+  isPinned: boolean;
   onReply: (message: Message) => void;
   onEdit: (message: Message) => void;
   onDelete: (message: Message) => void;
   onForward: (message: Message) => void;
   onJumpToMessage: (messageId: string) => void;
+  onToggleReaction: (emoji: string) => void;
+  onTogglePin: () => void;
 }
 
 function StatusTicks({ status }: { status?: MessageStatusValue }) {
@@ -104,11 +110,15 @@ export function MessageBubble({
   senderName,
   repliedMessage,
   repliedSenderName,
+  reactions,
+  isPinned,
   onReply,
   onEdit,
   onDelete,
   onForward,
   onJumpToMessage,
+  onToggleReaction,
+  onTogglePin,
 }: MessageBubbleProps) {
   const menu = useContextMenu();
 
@@ -130,6 +140,9 @@ export function MessageBubble({
         { label: 'Ответить', icon: Reply, onClick: () => onReply(message) },
         ...(canEdit ? [{ label: 'Редактировать', icon: Pencil, onClick: () => onEdit(message) }] : []),
         { label: 'Переслать', icon: Forward, onClick: () => onForward(message) },
+        isPinned
+          ? { label: 'Открепить', icon: PinOff, onClick: onTogglePin }
+          : { label: 'Закрепить', icon: Pin, onClick: onTogglePin },
         { label: 'Удалить', icon: Trash2, onClick: () => onDelete(message), danger: true },
       ]
     : [];
@@ -165,13 +178,43 @@ export function MessageBubble({
           </button>
         )}
         <MessageContent message={message} />
+        {reactions && reactions.length > 0 && (
+          <div className={`mt-1 flex flex-wrap gap-1 ${isVideoNote ? 'px-1' : ''}`}>
+            {reactions.map((r) => (
+              <button
+                key={r.emoji}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleReaction(r.emoji);
+                }}
+                className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs transition ${
+                  r.reactedByMe
+                    ? 'border-accent bg-accent/15 text-accent'
+                    : 'border-border bg-black/10 text-text-muted hover:bg-black/20'
+                }`}
+              >
+                <span>{r.emoji}</span>
+                <span>{r.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className={`mt-1 flex items-center justify-end gap-1 text-[11px] text-text-muted ${isVideoNote ? 'px-1' : ''}`}>
           {message.edited_at && <span>изменено</span>}
           <span>{formatMessageTime(message.created_at)}</span>
           {isOwn && !isPending && <StatusTicks status={status} />}
         </div>
       </div>
-      {menu.position && <ContextMenu x={menu.position.x} y={menu.position.y} items={menuItems} onClose={menu.close} />}
+      {menu.position && (
+        <ContextMenu
+          x={menu.position.x}
+          y={menu.position.y}
+          items={menuItems}
+          onClose={menu.close}
+          quickReactions={canActOn ? QUICK_REACTIONS : undefined}
+          onQuickReact={onToggleReaction}
+        />
+      )}
     </div>
   );
 }

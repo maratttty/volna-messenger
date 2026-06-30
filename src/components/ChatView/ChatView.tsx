@@ -1,10 +1,11 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Pin, X } from 'lucide-react';
 import type { ChatWithMeta, Message, MessageType, MemberWithProfile } from '../../types/database';
 import { useMessages } from '../../hooks/useMessages';
 import { useTyping } from '../../hooks/useTyping';
-import { forwardMessage } from '../../lib/messages';
-import { fetchChatMembers } from '../../lib/chats';
+import { forwardMessage, fetchMessageById } from '../../lib/messages';
+import { fetchChatMembers, pinMessage, unpinMessage } from '../../lib/chats';
+import { useChatStore } from '../../store/chat-store';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
@@ -39,6 +40,22 @@ function pluralizeMembers(n: number): string {
   return `${n} участников`;
 }
 
+function pinnedPreviewText(message: Message): string {
+  if (message.deleted) return 'Сообщение удалено';
+  switch (message.type) {
+    case 'image':
+      return '📷 Фото';
+    case 'file':
+      return `📎 ${message.attachment_meta?.name ?? 'Файл'}`;
+    case 'voice':
+      return '🎤 Голосовое сообщение';
+    case 'video_note':
+      return '📹 Видео-сообщение';
+    default:
+      return message.content ?? '';
+  }
+}
+
 export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }: ChatViewProps) {
   const {
     messages,
@@ -54,6 +71,8 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
     remove,
     removeForMe,
     statuses,
+    reactions,
+    toggleReaction,
   } = useMessages(chat.id, currentUserId);
   const { typingUsers, notifyTyping } = useTyping(chat.id, currentUserId, currentUserDisplayName);
 
@@ -65,6 +84,38 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
   const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null);
   const [members, setMembers] = useState<MemberWithProfile[]>([]);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
+
+  // The pinned message is usually already in the loaded page, but for an
+  // older pin (or right after opening the chat) it has to be fetched directly.
+  useEffect(() => {
+    if (!chat.pinned_message_id) {
+      setPinnedMessage(null);
+      return;
+    }
+    const fromLoaded = messages.find((m) => m.id === chat.pinned_message_id);
+    if (fromLoaded) {
+      setPinnedMessage(fromLoaded);
+      return;
+    }
+    let cancelled = false;
+    fetchMessageById(chat.pinned_message_id).then((msg) => {
+      if (!cancelled) setPinnedMessage(msg);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [chat.pinned_message_id, messages]);
+
+  async function handleTogglePin(message: Message) {
+    if (chat.pinned_message_id === message.id) {
+      await unpinMessage(chat.id);
+      useChatStore.getState().patchChat(chat.id, { pinned_message_id: null });
+    } else {
+      await pinMessage(chat.id, message.id);
+      useChatStore.getState().patchChat(chat.id, { pinned_message_id: message.id });
+    }
+  }
 
   const refreshMembers = useCallback(async () => {
     if (chat.type !== 'group') return;
@@ -229,6 +280,28 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
         </button>
       </div>
 
+      {pinnedMessage && (
+        <div className="flex w-full items-center gap-2 border-b border-border bg-surface px-4 py-2">
+          <button
+            onClick={() => void handleJumpToMessage(pinnedMessage.id)}
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          >
+            <Pin size={14} className="shrink-0 text-accent" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-accent">Закреплённое сообщение</p>
+              <p className="truncate text-xs text-text-muted">{pinnedPreviewText(pinnedMessage)}</p>
+            </div>
+          </button>
+          <button
+            onClick={() => void handleTogglePin(pinnedMessage)}
+            title="Открепить"
+            className="shrink-0 rounded-md p-1 text-text-muted transition hover:bg-surface-hover hover:text-text"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {searchOpen && (
         <ChatSearchBar
           chatId={chat.id}
@@ -242,6 +315,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
         messages={messages}
         currentUserId={currentUserId}
         statuses={statuses}
+        reactions={reactions}
         hasMore={hasMore}
         loadingMore={loadingMore}
         loading={loading}
@@ -253,6 +327,9 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
         onDelete={setDeleteTarget}
         onForward={setForwardTarget}
         onJumpToMessage={(messageId) => void handleJumpToMessage(messageId)}
+        onToggleReaction={(messageId, emoji) => void toggleReaction(messageId, emoji)}
+        pinnedMessageId={chat.pinned_message_id}
+        onTogglePin={(message) => void handleTogglePin(message)}
         highlightMessageId={highlightMessageId}
       />
 

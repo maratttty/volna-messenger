@@ -18,6 +18,15 @@ async function fetchHiddenMessageIds(chatId: string, userId: string): Promise<st
   return (data ?? []).map((r: { message_id: string }) => r.message_id);
 }
 
+// For displaying a pinned-message banner whose target may be older than
+// whatever page is currently loaded — fetched directly by id instead of
+// paging back through history just to find it.
+export async function fetchMessageById(messageId: string): Promise<Message | null> {
+  const { data, error } = await supabase.from('messages').select('*').eq('id', messageId).maybeSingle();
+  if (error) throw error;
+  return (data as Message) ?? null;
+}
+
 // Cursor-based pagination: fetch messages older than `before` (or the most
 // recent page if `before` is omitted), returned oldest-first for rendering.
 export async function fetchMessages(

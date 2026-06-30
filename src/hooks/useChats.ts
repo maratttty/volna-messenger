@@ -6,7 +6,7 @@ import { showMessageNotification } from '../lib/notifications';
 import { onNetworkRecovery } from '../lib/network';
 import { useChatStore } from '../store/chat-store';
 import { useAuth } from '../contexts/AuthContext';
-import type { ChatWithMeta, Message } from '../types/database';
+import type { Chat, ChatWithMeta, Message } from '../types/database';
 
 // Suppressed only when this exact chat is both the open one AND the tab is
 // actually visible — a background tab on the active chat still needs to alert.
@@ -18,7 +18,7 @@ function shouldNotify(chat: ChatWithMeta, message: Message, userId: string): boo
 
 export function useChats() {
   const { session } = useAuth();
-  const { chats, setChats, upsertChat } = useChatStore();
+  const { chats, setChats, upsertChat, patchChat } = useChatStore();
   const [loading, setLoading] = useState(true);
   const userId = session?.user.id;
 
@@ -77,6 +77,23 @@ export function useChats() {
       )
       .on(
         'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'chats' },
+        (payload) => {
+          // Title/avatar/pin changes — only meaningful if it's a chat we
+          // already have loaded (no chat_id filter is possible server-side
+          // here, so just no-op for chats outside this user's list).
+          const row = payload.new as Chat;
+          if (useChatStore.getState().chats.some((c) => c.id === row.id)) {
+            patchChat(row.id, {
+              title: row.title,
+              avatar_url: row.avatar_url,
+              pinned_message_id: row.pinned_message_id,
+            });
+          }
+        },
+      )
+      .on(
+        'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
@@ -109,7 +126,7 @@ export function useChats() {
       stopWatchingRecovery();
       void supabase.removeChannel(channel);
     };
-  }, [userId, reload, upsertChat]);
+  }, [userId, reload, upsertChat, patchChat]);
 
   return { chats, reload, loading };
 }

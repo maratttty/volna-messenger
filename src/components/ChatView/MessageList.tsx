@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MessageBubble } from '../Message/MessageBubble';
 import { Spinner } from '../ui/Spinner';
-import type { Message, MessageStatusValue } from '../../types/database';
+import type { Message, MessageStatusValue, ReactionSummary } from '../../types/database';
 
 interface MessageListProps {
   messages: Message[];
   currentUserId: string;
   statuses: Map<string, MessageStatusValue>;
+  reactions: Map<string, ReactionSummary[]>;
   hasMore: boolean;
   loadingMore: boolean;
   loading: boolean;
@@ -18,6 +19,9 @@ interface MessageListProps {
   onDelete: (message: Message) => void;
   onForward: (message: Message) => void;
   onJumpToMessage: (messageId: string) => void;
+  onToggleReaction: (messageId: string, emoji: string) => void;
+  pinnedMessageId: string | null;
+  onTogglePin: (message: Message) => void;
   highlightMessageId?: string | null;
 }
 
@@ -25,6 +29,7 @@ export function MessageList({
   messages,
   currentUserId,
   statuses,
+  reactions,
   hasMore,
   loadingMore,
   loading,
@@ -36,6 +41,9 @@ export function MessageList({
   onDelete,
   onForward,
   onJumpToMessage,
+  onToggleReaction,
+  pinnedMessageId,
+  onTogglePin,
   highlightMessageId,
 }: MessageListProps) {
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
@@ -151,11 +159,15 @@ export function MessageList({
               senderName={msg.sender_id ? senderNames?.get(msg.sender_id) : undefined}
               repliedMessage={repliedMessage}
               repliedSenderName={repliedMessage ? resolveSenderName(repliedMessage.sender_id) : undefined}
+              reactions={reactions.get(msg.id)}
+              isPinned={pinnedMessageId === msg.id}
               onReply={onReply}
               onEdit={onEdit}
               onDelete={onDelete}
               onForward={onForward}
               onJumpToMessage={onJumpToMessage}
+              onToggleReaction={(emoji) => onToggleReaction(msg.id, emoji)}
+              onTogglePin={() => onTogglePin(msg)}
             />
           </div>
         );
