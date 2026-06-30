@@ -64,7 +64,7 @@ export function ContextMenu({ x, y, items, onClose, quickReactions, onQuickReact
         onClick={(e) => e.stopPropagation()}
       >
         {quickReactions && quickReactions.length > 0 && (
-          <div className="flex items-center gap-0.5 border-b border-border px-1.5 py-1.5">
+          <div className="flex items-center gap-1 border-b border-border px-2 py-2">
             {quickReactions.map((emoji) => (
               <button
                 key={emoji}
@@ -72,7 +72,7 @@ export function ContextMenu({ x, y, items, onClose, quickReactions, onQuickReact
                   onQuickReact?.(emoji);
                   onClose();
                 }}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg transition hover:bg-surface-hover hover:scale-110"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg text-3xl transition hover:bg-surface-hover hover:scale-110"
               >
                 {emoji}
               </button>

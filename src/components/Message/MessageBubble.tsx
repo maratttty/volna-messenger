@@ -187,14 +187,14 @@ export function MessageBubble({
                   e.stopPropagation();
                   onToggleReaction(r.emoji);
                 }}
-                className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs transition ${
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 transition ${
                   r.reactedByMe
                     ? 'border-accent bg-accent/15 text-accent'
                     : 'border-border bg-black/10 text-text-muted hover:bg-black/20'
                 }`}
               >
-                <span>{r.emoji}</span>
-                <span>{r.count}</span>
+                <span className="text-2xl leading-none">{r.emoji}</span>
+                <span className="text-sm font-medium">{r.count}</span>
               </button>
             ))}
           </div>
