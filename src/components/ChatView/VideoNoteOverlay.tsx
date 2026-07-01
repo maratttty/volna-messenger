@@ -52,10 +52,17 @@ export function VideoNoteOverlay({
   // When user swipes toward cancel, shift the circle a bit to reflect it
   const circleShift = cancelProgress * -32;
 
+  // Backdrop tints red when user swipes toward cancel
+  const bgColor = flash
+    ? 'rgba(255,255,255,0.97)'
+    : nearCancel
+      ? `rgba(${Math.round(80 + cancelProgress * 80)},0,0,0.82)`
+      : 'rgba(0,0,0,0.82)';
+
   return (
     <div
-      className="anim-fade-in fixed inset-0 z-50 flex flex-col items-center justify-center transition-colors duration-300"
-      style={{ background: flash ? 'rgba(255,255,255,0.97)' : 'rgba(0,0,0,0.82)' }}
+      className="anim-fade-in fixed inset-0 z-50 flex flex-col items-center justify-center transition-colors duration-150"
+      style={{ background: bgColor }}
     >
       {/* ── Swipe hints (hidden in locked mode) ─────────────────────── */}
       {!locked && (
@@ -93,8 +100,8 @@ export function VideoNoteOverlay({
           progress={progress}
           size={OUTER_SIZE}
           strokeWidth={RING_WIDTH}
-          className={nearEnd ? 'text-red-400' : 'text-accent'}
-          trackClassName="text-white/20"
+          className={nearEnd ? 'text-red-400' : nearCancel ? 'text-red-400' : 'text-accent'}
+          trackClassName="text-white/30"
         />
 
         {/* Camera circle */}
