@@ -1,21 +1,24 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, UsersRound, X } from 'lucide-react';
+import { Bell, UsersRound, X, MessageSquare, Users, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useChats } from '../hooks/useChats';
 import { useChatStore } from '../store/chat-store';
 import { ChatList } from '../components/ChatList/ChatList';
+import { ContactsPanel } from '../components/ChatList/ContactsPanel';
 import { ChatView } from '../components/ChatView/ChatView';
 import { NewGroupModal } from '../components/ChatList/NewGroupModal';
-import { Avatar } from '../components/ui/Avatar';
 import { APP_NAME } from '../config';
 import { getNotificationPermission, isNotificationSupported, requestNotificationPermission } from '../lib/notifications';
+
+type SidebarTab = 'chats' | 'contacts';
 
 export default function ChatPage() {
   const { session, profile, signOut } = useAuth();
   const navigate = useNavigate();
   const { chats, loading, reload } = useChats();
   const { activeChatId, setActiveChatId } = useChatStore();
+  const [activeTab, setActiveTab] = useState<SidebarTab>('chats');
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [notifPermission, setNotifPermission] = useState(getNotificationPermission());
   const [notifDismissed, setNotifDismissed] = useState(false);
@@ -30,10 +33,17 @@ export default function ChatPage() {
 
   const activeChat = chats.find((c) => c.id === activeChatId);
 
+  const totalUnread = chats.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
+
   async function handleGroupCreated(chatId: string) {
     setShowNewGroup(false);
     await reload();
     setActiveChatId(chatId);
+  }
+
+  function handleOpenChat(chatId: string) {
+    setActiveChatId(chatId);
+    setActiveTab('chats');
   }
 
   return (
@@ -43,13 +53,15 @@ export default function ChatPage() {
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <span className="font-semibold text-text">{APP_NAME}</span>
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setShowNewGroup(true)}
-              title="Новая группа"
-              className="rounded-md p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text"
-            >
-              <UsersRound size={16} />
-            </button>
+            {activeTab === 'chats' && (
+              <button
+                onClick={() => setShowNewGroup(true)}
+                title="Новая группа"
+                className="rounded-md p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text"
+              >
+                <UsersRound size={16} />
+              </button>
+            )}
             <button
               onClick={() => void signOut()}
               className="rounded-md px-2 py-1 text-xs text-text-muted transition hover:bg-surface-hover hover:text-text"
@@ -80,7 +92,7 @@ export default function ChatPage() {
         )}
 
         <div className="flex-1 overflow-hidden">
-          {session && (
+          {session && activeTab === 'chats' && (
             <ChatList
               chats={chats}
               activeChatId={activeChatId}
@@ -89,18 +101,49 @@ export default function ChatPage() {
               currentUserId={session.user.id}
             />
           )}
+          {session && activeTab === 'contacts' && (
+            <ContactsPanel
+              chats={chats}
+              currentUserId={session.user.id}
+              onOpenChat={handleOpenChat}
+            />
+          )}
         </div>
 
-        <button
-          onClick={() => navigate('/settings')}
-          className="flex items-center gap-3 border-t border-border px-4 py-3 text-left transition hover:bg-surface-hover"
-        >
-          <Avatar name={profile?.display_name ?? ''} src={profile?.avatar_url} size="md" />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-text">{profile?.display_name}</p>
-            <p className="truncate text-xs text-text-muted">@{profile?.username}</p>
-          </div>
-        </button>
+        {/* Bottom tab bar */}
+        <div className="flex items-center border-t border-border bg-surface">
+          {(
+            [
+              { id: 'chats',    Icon: MessageSquare, label: 'Чаты',     badge: totalUnread },
+              { id: 'contacts', Icon: Users,         label: 'Контакты', badge: 0 },
+            ] as { id: SidebarTab; Icon: typeof MessageSquare; label: string; badge: number }[]
+          ).map(({ id, Icon, label, badge }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`relative flex flex-1 flex-col items-center gap-0.5 py-3 text-xs font-medium transition ${
+                activeTab === id ? 'text-accent' : 'text-text-muted hover:text-text'
+              }`}
+            >
+              <div className="relative">
+                <Icon size={20} />
+                {badge > 0 && (
+                  <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
+                    {badge > 99 ? '99+' : badge}
+                  </span>
+                )}
+              </div>
+              <span>{label}</span>
+            </button>
+          ))}
+          <button
+            onClick={() => navigate('/settings')}
+            className="flex flex-1 flex-col items-center gap-0.5 py-3 text-xs font-medium text-text-muted transition hover:text-text"
+          >
+            <Settings size={20} />
+            <span>Настройки</span>
+          </button>
+        </div>
       </aside>
 
       {/* Main content */}
