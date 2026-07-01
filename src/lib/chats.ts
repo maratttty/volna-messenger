@@ -6,7 +6,7 @@ export async function fetchChats(userId: string): Promise<ChatWithMeta[]> {
   // Get chat memberships
   const { data: memberships, error: memErr } = await supabase
     .from('chat_members')
-    .select('chat_id, role, last_read_message_id, muted')
+    .select('chat_id, role, last_read_message_id, muted, pinned_at')
     .eq('user_id', userId);
 
   if (memErr) throw memErr;
@@ -96,16 +96,13 @@ export async function fetchChats(userId: string): Promise<ChatWithMeta[]> {
         unreadCount,
         myRole: membership?.role ?? 'member',
         muted: membership?.muted ?? false,
+        pinned_at: membership?.pinned_at ?? null,
       } as ChatWithMeta;
     }),
   );
 
-  // Sort by last message time descending
-  enriched.sort((a, b) => {
-    const ta = a.lastMessage?.created_at ?? a.created_at;
-    const tb = b.lastMessage?.created_at ?? b.created_at;
-    return tb.localeCompare(ta);
-  });
+  // Pinned chats first (by pin time), then by last message time
+  enriched.sort(chatComparator);
 
   return enriched;
 }
@@ -326,4 +323,70 @@ export async function joinChatViaInvite(
   }
 
   return { chatId: invite.chat_id, alreadyMember: false };
+}
+
+// Shared sort: pinned chats first (by pin time desc), then by last message time desc.
+export function chatComparator(a: ChatWithMeta, b: ChatWithMeta): number {
+  if (a.pinned_at && !b.pinned_at) return -1;
+  if (!a.pinned_at && b.pinned_at) return 1;
+  if (a.pinned_at && b.pinned_at) return b.pinned_at.localeCompare(a.pinned_at);
+  const ta = a.lastMessage?.created_at ?? a.created_at;
+  const tb = b.lastMessage?.created_at ?? b.created_at;
+  return tb.localeCompare(ta);
+}
+
+export async function pinChat(chatId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('chat_members')
+    .update({ pinned_at: new Date().toISOString() })
+    .eq('chat_id', chatId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function unpinChat(chatId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('chat_members')
+    .update({ pinned_at: null })
+    .eq('chat_id', chatId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function markChatRead(chatId: string, userId: string): Promise<void> {
+  const { data: last } = await supabase
+    .from('messages')
+    .select('id')
+    .eq('chat_id', chatId)
+    .eq('deleted', false)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from('chat_members')
+    .update({ last_read_message_id: last?.id ?? null })
+    .eq('chat_id', chatId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function markChatUnread(chatId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('chat_members')
+    .update({ last_read_message_id: null })
+    .eq('chat_id', chatId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+// "Delete" from the user's perspective = leave the chat (remove membership).
+// The chat itself and its messages remain for other members.
+export async function leaveAndDeleteChat(chatId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('chat_members')
+    .delete()
+    .eq('chat_id', chatId)
+    .eq('user_id', userId);
+  if (error) throw error;
 }

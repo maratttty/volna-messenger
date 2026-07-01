@@ -6,6 +6,7 @@ export interface ContextMenuItem {
   icon: LucideIcon;
   onClick: () => void;
   danger?: boolean;
+  disabled?: boolean;
 }
 
 interface ContextMenuProps {
@@ -83,11 +84,17 @@ export function ContextMenu({ x, y, items, onClose, quickReactions, onQuickReact
           <button
             key={item.label}
             onClick={() => {
+              if (item.disabled) return;
               item.onClick();
               onClose();
             }}
-            className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition hover:bg-surface-hover ${
-              item.danger ? 'text-red-400' : 'text-text'
+            disabled={item.disabled}
+            className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition ${
+              item.disabled
+                ? 'cursor-default opacity-40 text-text-muted'
+                : item.danger
+                  ? 'text-red-400 hover:bg-surface-hover'
+                  : 'text-text hover:bg-surface-hover'
             }`}
           >
             <item.icon size={16} />
