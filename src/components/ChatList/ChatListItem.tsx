@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { BellOff, Bell, Pin, PinOff, CheckCheck, BookOpen, Trash2, X } from 'lucide-react';
 import type { ChatWithMeta } from '../../types/database';
 import { Avatar } from '../ui/Avatar';
@@ -36,6 +36,7 @@ interface ChatListItemProps {
 
 export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListItemProps) {
   const menu = useContextMenu();
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const title     = chat.type === 'direct' ? chat.otherUser?.display_name ?? '...' : chat.title ?? 'Группа';
@@ -114,6 +115,7 @@ export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListI
   return (
     <div className="relative">
       <button
+        ref={buttonRef}
         {...handleTriggerProps()}
         onClick={onClick}
         className={`flex w-full items-center gap-3 px-4 py-3 text-left transition active:scale-[0.98] active:bg-surface-hover ${
@@ -143,10 +145,10 @@ export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListI
         </div>
       </button>
 
-      {menu.position && (
+      {menu.position && buttonRef.current && (
         <ContextMenu
-          x={menu.position.x}
-          y={menu.position.y}
+          anchorRect={buttonRef.current.getBoundingClientRect()}
+          align="left"
           items={menuItems}
           onClose={menu.close}
         />

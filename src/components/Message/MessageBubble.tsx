@@ -1,4 +1,5 @@
-import { Paperclip, Reply, Pencil, Trash2, Forward, Pin, PinOff } from 'lucide-react';
+import { useRef } from 'react';
+import { Paperclip, Reply, Pencil, Trash2, Forward, Pin, PinOff, Copy } from 'lucide-react';
 import type { Message, MessageStatusValue, ReactionSummary } from '../../types/database';
 import { formatMessageTime } from '../../lib/time';
 import { AudioPlayer } from './AudioPlayer';
@@ -121,6 +122,7 @@ export function MessageBubble({
   onTogglePin,
 }: MessageBubbleProps) {
   const menu = useContextMenu();
+  const bubbleRef = useRef<HTMLDivElement>(null);
 
   if (message.type === 'system') {
     return (
@@ -133,12 +135,14 @@ export function MessageBubble({
   const isPending = message.id.startsWith('pending-');
   const isVideoNote = message.type === 'video_note';
   const canEdit = isOwn && message.type === 'text' && !message.deleted;
+  const canCopy = message.type === 'text' && !message.deleted && !!message.content;
   const canActOn = !message.deleted && !isPending;
 
   const menuItems: ContextMenuItem[] = canActOn
     ? [
         { label: 'Ответить', icon: Reply, onClick: () => onReply(message) },
         ...(canEdit ? [{ label: 'Редактировать', icon: Pencil, onClick: () => onEdit(message) }] : []),
+        ...(canCopy ? [{ label: 'Копировать', icon: Copy, onClick: () => { void navigator.clipboard.writeText(message.content!); } }] : []),
         { label: 'Переслать', icon: Forward, onClick: () => onForward(message) },
         isPinned
           ? { label: 'Открепить', icon: PinOff, onClick: onTogglePin }
@@ -150,6 +154,7 @@ export function MessageBubble({
   return (
     <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} px-3 py-0.5`}>
       <div
+        ref={bubbleRef}
         {...(canActOn ? menu.triggerProps : {})}
         className={
           isVideoNote
@@ -205,10 +210,10 @@ export function MessageBubble({
           {isOwn && !isPending && <StatusTicks status={status} />}
         </div>
       </div>
-      {menu.position && (
+      {menu.position && bubbleRef.current && (
         <ContextMenu
-          x={menu.position.x}
-          y={menu.position.y}
+          anchorRect={bubbleRef.current.getBoundingClientRect()}
+          align={isOwn ? 'right' : 'left'}
           items={menuItems}
           onClose={menu.close}
           quickReactions={canActOn ? QUICK_REACTIONS : undefined}
