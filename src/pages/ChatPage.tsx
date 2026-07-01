@@ -14,26 +14,31 @@ import { InstallBanner } from '../components/ui/InstallBanner';
 
 type SidebarTab = 'chats' | 'contacts';
 
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
-  useEffect(() => {
-    const fn = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', fn);
-    return () => window.removeEventListener('resize', fn);
-  }, []);
-  return isMobile;
-}
-
 export default function ChatPage() {
   const { session, profile, signOut } = useAuth();
   const navigate = useNavigate();
   const { chats, loading, reload } = useChats();
   const { activeChatId, setActiveChatId } = useChatStore();
   const [activeTab, setActiveTab] = useState<SidebarTab>('chats');
-  const isMobile = useIsMobile();
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [notifPermission, setNotifPermission] = useState(getNotificationPermission());
   const [notifDismissed, setNotifDismissed] = useState(false);
+
+  // Android/PWA hardware back button: when a chat is open on mobile,
+  // push a fake history entry so "back" closes the chat instead of leaving the app.
+  useEffect(() => {
+    if (!activeChatId) return;
+    history.pushState({ chatOpen: true }, '');
+
+    function onPopState() {
+      // Only intercept on narrow screens (mobile)
+      if (window.innerWidth < 768) {
+        setActiveChatId(null);
+      }
+    }
+    window.addEventListener('popstate', onPopState, { once: true });
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [activeChatId, setActiveChatId]);
 
   async function handleEnableNotifications() {
     const result = await requestNotificationPermission();
@@ -44,7 +49,6 @@ export default function ChatPage() {
     isNotificationSupported() && notifPermission === 'default' && !notifDismissed;
 
   const activeChat = chats.find((c) => c.id === activeChatId);
-
   const totalUnread = chats.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
 
   async function handleGroupCreated(chatId: string) {
@@ -58,15 +62,26 @@ export default function ChatPage() {
     setActiveTab('chats');
   }
 
-  // On mobile: show sidebar when no chat selected, show chat fullscreen when chat selected.
-  // On desktop: show both side-by-side always.
-  const showSidebar = !isMobile || !activeChatId;
-  const showChat = !!activeChat && !!session;
-
   return (
-    <div className="flex h-full">
-      {/* Sidebar */}
-      <aside className={`${showSidebar ? 'flex' : 'hidden'} ${isMobile ? 'w-full' : 'w-72 shrink-0'} flex-col border-r border-border bg-surface`}>
+    <div className="flex h-full overflow-hidden">
+
+      {/*
+        ── SIDEBAR ──────────────────────────────────────────────────────────
+        Mobile  (< 768px):
+          • No active chat  → w-full flex   (full-screen list)
+          • Chat open       → hidden         (list slides away)
+        Desktop (≥ 768px):
+          • Always          → w-72 flex      (fixed sidebar alongside chat)
+      */}
+      <aside
+        className={[
+          'flex flex-col border-r border-border bg-surface',
+          activeChatId
+            ? 'hidden md:flex md:w-72 md:shrink-0'   // mobile: gone; desktop: fixed
+            : 'w-full md:w-72 md:shrink-0',           // mobile: full; desktop: fixed
+        ].join(' ')}
+      >
+        {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <span className="font-semibold text-text">{APP_NAME}</span>
           <div className="flex items-center gap-1">
@@ -102,7 +117,6 @@ export default function ChatPage() {
             </button>
             <button
               onClick={() => setNotifDismissed(true)}
-              title="Не сейчас"
               className="shrink-0 rounded-md p-1 text-text-muted transition hover:bg-surface hover:text-text"
             >
               <X size={14} />
@@ -110,7 +124,8 @@ export default function ChatPage() {
           </div>
         )}
 
-        <div className="flex-1 overflow-hidden">
+        {/* Tab content */}
+        <div className="min-h-0 flex-1 overflow-hidden">
           {session && activeTab === 'chats' && (
             <ChatList
               chats={chats}
@@ -129,8 +144,8 @@ export default function ChatPage() {
           )}
         </div>
 
-        {/* Bottom tab bar — pb-safe adds padding for iPhone home indicator */}
-        <div className="pb-safe flex items-center border-t border-border bg-surface">
+        {/* Bottom tab bar — pb-safe pads for iPhone home indicator */}
+        <div className="pb-safe flex shrink-0 items-center border-t border-border bg-surface">
           {(
             [
               { id: 'chats',    Icon: MessageSquare, label: 'Чаты',     badge: totalUnread },
@@ -165,25 +180,34 @@ export default function ChatPage() {
         </div>
       </aside>
 
-      {/* Main content */}
-      {showChat ? (
+      {/*
+        ── MAIN AREA ────────────────────────────────────────────────────────
+        Mobile  (< 768px):
+          • No active chat  → not rendered   (sidebar fills screen)
+          • Chat open       → full screen
+        Desktop (≥ 768px):
+          • No active chat  → "choose a chat" placeholder
+          • Chat open       → fills remaining space next to sidebar
+      */}
+      {activeChat && session ? (
         <ChatView
-          key={activeChat!.id}
-          chat={activeChat!}
+          key={activeChat.id}
+          chat={activeChat}
           chats={chats}
-          currentUserId={session!.user.id}
+          currentUserId={session.user.id}
           currentUserDisplayName={profile?.display_name ?? ''}
-          onBack={isMobile ? () => setActiveChatId(null) : undefined}
+          onBack={() => setActiveChatId(null)}
         />
-      ) : !isMobile ? (
-        <main className="flex flex-1 flex-col items-center justify-center text-text-muted">
+      ) : (
+        // Desktop-only empty state; on mobile the sidebar is full-screen so this is never visible
+        <main className="hidden md:flex md:flex-1 md:flex-col md:items-center md:justify-center text-text-muted">
           <div className="text-center">
             <div className="mb-3 text-4xl">💬</div>
             <p className="text-lg font-medium text-text">Выберите чат</p>
             <p className="mt-1 text-sm">или начните новый разговор</p>
           </div>
         </main>
-      ) : null}
+      )}
 
       {showNewGroup && session && (
         <NewGroupModal

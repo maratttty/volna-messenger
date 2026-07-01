@@ -315,7 +315,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
         {onBack && (
           <button
             onClick={onBack}
-            className="shrink-0 rounded-full p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text"
+            className="md:hidden shrink-0 rounded-full p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text"
           >
             <ArrowLeft size={20} />
           </button>
