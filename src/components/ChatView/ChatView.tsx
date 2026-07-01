@@ -1,5 +1,10 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
-import { Search, Pin, X } from 'lucide-react';
+import {
+  Search, Pin, X,
+  Gamepad2, Pencil, Car, Star, Music, Cloud, Gift, Heart,
+  Plane, Rocket, Crown, Zap, Sun, Coffee, Umbrella, Camera,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { ChatWithMeta, Message, MessageType, MemberWithProfile } from '../../types/database';
 import { useMessages } from '../../hooks/useMessages';
 import { useTyping } from '../../hooks/useTyping';
@@ -40,33 +45,62 @@ function pluralizeMembers(n: number): string {
   return `${n} участников`;
 }
 
-const WALLPAPER_ITEMS = [
-  { e: '🕹️', t: '4%',  l: '6%',  s: '2.2rem', r: -15 },
-  { e: '✏️', t: '9%',  l: '78%', s: '1.8rem', r: 22 },
-  { e: '🐱', t: '16%', l: '38%', s: '2.4rem', r: 0 },
-  { e: '🚗', t: '23%', l: '88%', s: '1.9rem', r: -12 },
-  { e: '⭐', t: '29%', l: '14%', s: '1.6rem', r: 28 },
-  { e: '🍪', t: '36%', l: '62%', s: '2.1rem', r: -6 },
-  { e: '🎮', t: '42%', l: '22%', s: '2.2rem', r: 14 },
-  { e: '🎨', t: '50%', l: '82%', s: '1.8rem', r: -20 },
-  { e: '✈️', t: '56%', l: '46%', s: '2.0rem', r: -9 },
-  { e: '🎵', t: '63%', l: '8%',  s: '1.6rem', r: 32 },
-  { e: '🌈', t: '69%', l: '70%', s: '2.1rem', r: 0 },
-  { e: '🎁', t: '75%', l: '32%', s: '2.0rem', r: -14 },
-  { e: '🍦', t: '81%', l: '86%', s: '1.7rem', r: 10 },
-  { e: '☁️', t: '87%', l: '52%', s: '2.3rem', r: 0 },
-  { e: '🎈', t: '93%', l: '17%', s: '1.8rem', r: -6 },
-  { e: '🦋', t: '7%',  l: '52%', s: '1.8rem', r: 0 },
-  { e: '🌸', t: '19%', l: '22%', s: '1.7rem', r: 18 },
-  { e: '🎲', t: '33%', l: '48%', s: '1.9rem', r: -18 },
-  { e: '🏆', t: '46%', l: '93%', s: '1.8rem', r: 10 },
-  { e: '🎯', t: '59%', l: '27%', s: '1.7rem', r: -7 },
-  { e: '🍩', t: '71%', l: '11%', s: '2.1rem', r: 4 },
-  { e: '🔮', t: '76%', l: '47%', s: '1.9rem', r: 0 },
-  { e: '🐦', t: '95%', l: '57%', s: '2.0rem', r: -16 },
-  { e: '🎪', t: '13%', l: '91%', s: '1.7rem', r: 7 },
-  { e: '🌟', t: '84%', l: '73%', s: '1.6rem', r: 0 },
+const PATTERN_ICONS: LucideIcon[] = [
+  Gamepad2, Pencil, Car, Star, Music, Cloud, Gift, Heart,
+  Plane, Rocket, Crown, Zap, Sun, Coffee, Umbrella, Camera,
 ];
+
+// Deterministic hash so the pattern looks "scattered" but never changes between renders.
+function h(n: number): number {
+  let x = (((n >> 16) ^ n) * 0x45d9f3b) | 0;
+  x = (((x >> 16) ^ x) * 0x45d9f3b) | 0;
+  return ((x >> 16) ^ x) >>> 0;
+}
+
+function ChatWallpaper() {
+  const COLS = 8;
+  const ROWS = 13;
+  const items: { Icon: LucideIcon; x: number; y: number; rotate: number; key: string }[] = [];
+
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      const idx = (row * COLS + col);
+      const Icon = PATTERN_ICONS[idx % PATTERN_ICONS.length];
+      // Jitter so grid doesn't look mechanical
+      const jx = ((h(idx * 3 + 1) % 220) - 110) / 1100;   // ±10% of cell width
+      const jy = ((h(idx * 7 + 2) % 160) - 80)  / 1300;   // ±6% of cell height
+      const rotate = ((h(idx * 11 + 5) % 72) - 36);        // ±36 deg
+      items.push({
+        Icon,
+        x: (col / COLS + 1 / (COLS * 2) + jx) * 100,
+        y: (row / ROWS + 1 / (ROWS * 2) + jy) * 100,
+        rotate,
+        key: `${row}-${col}`,
+      });
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none select-none">
+      {items.map(({ Icon, x, y, rotate, key }) => (
+        <div
+          key={key}
+          style={{
+            position: 'absolute',
+            left: `${x}%`,
+            top: `${y}%`,
+            transform: `translate(-50%, -50%) rotate(${rotate}deg)`,
+            opacity: 0.18,
+            color: 'white',
+            lineHeight: 1,
+          }}
+        >
+          <Icon size={26} strokeWidth={1.5} />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function pinnedPreviewText(message: Message): string {
   if (message.deleted) return 'Сообщение удалено';
@@ -343,26 +377,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
         className="relative flex-1 flex flex-col overflow-hidden"
         style={{ background: 'linear-gradient(165deg, #c8e8f5 0%, #b4e8de 100%)' }}
       >
-        {/* Decorative wallpaper layer — stays fixed while messages scroll */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none select-none">
-          {WALLPAPER_ITEMS.map((item, i) => (
-            <span
-              key={i}
-              style={{
-                position: 'absolute',
-                top: item.t,
-                left: item.l,
-                fontSize: item.s,
-                opacity: 0.14,
-                transform: `rotate(${item.r}deg)`,
-                lineHeight: 1,
-                userSelect: 'none',
-              }}
-            >
-              {item.e}
-            </span>
-          ))}
-        </div>
+        <ChatWallpaper />
         <MessageList
           messages={messages}
           currentUserId={currentUserId}
