@@ -109,7 +109,6 @@ export function VideoNotePlayer({ src, durationSeconds }: VideoNotePlayerProps) 
 
   const progress  = duration > 0 ? currentTime / duration : 0;
   const remaining = Math.max(0, duration - currentTime);
-  const nearEnd   = duration > 0 && remaining < 10;
 
   return (
     <button
@@ -119,14 +118,15 @@ export function VideoNotePlayer({ src, durationSeconds }: VideoNotePlayerProps) 
       style={{ width: OUTER, height: OUTER }}
       aria-label="Видео-сообщение"
     >
-      {/* Circular progress ring */}
-      <CircularProgressRing
-        progress={progress}
-        size={OUTER}
-        strokeWidth={3}
-        className={nearEnd ? 'text-red-400' : 'text-accent'}
-        trackClassName="text-border"
-      />
+      {/* Circular progress ring — only when playing with sound (after tap) */}
+      {!muted && (
+        <CircularProgressRing
+          progress={progress}
+          size={OUTER}
+          strokeWidth={3}
+          className="text-accent/70"
+        />
+      )}
 
       {/* Video clipped to circle */}
       <span
@@ -144,7 +144,7 @@ export function VideoNotePlayer({ src, durationSeconds }: VideoNotePlayerProps) 
         {/* Play overlay — shown when paused/idle */}
         {!playing && (
           <span className="absolute inset-0 flex items-center justify-center bg-black/20 transition-opacity duration-150">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/40">
               {muted
                 ? <Volume2 size={22} className="text-white drop-shadow" />
                 : <Play    size={22} className="fill-white text-white drop-shadow" />
