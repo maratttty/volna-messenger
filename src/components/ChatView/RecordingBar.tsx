@@ -1,17 +1,16 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { ChevronLeft, Lock, Trash2 } from 'lucide-react';
 import { useAudioLevel } from '../../hooks/useAudioLevel';
-import { CircularProgressRing } from '../ui/CircularProgressRing';
 
 interface RecordingBarProps {
-  mode: 'voice' | 'video';
+  mode: 'voice';
   elapsedSeconds: number;
   maxDurationSeconds: number;
-  cancelProgress: number; // 0..1 — how close to the cancel threshold the drag is
+  cancelProgress: number;
   locked: boolean;
   onCancelLocked: () => void;
   audioStream: MediaStream | null;
-  videoStream: MediaStream | null;
+  videoStream: null;
 }
 
 function formatTimer(seconds: number): string {
@@ -21,8 +20,6 @@ function formatTimer(seconds: number): string {
 }
 
 const LEVEL_BAR_COUNT = 20;
-const PREVIEW_SIZE = 36;
-const RING_PADDING = 4;
 
 function LevelBars({ stream }: { stream: MediaStream | null }) {
   const level = useAudioLevel(stream);
@@ -41,25 +38,6 @@ function LevelBars({ stream }: { stream: MediaStream | null }) {
           />
         );
       })}
-    </div>
-  );
-}
-
-function CameraPreview({ stream, progress }: { stream: MediaStream | null; progress: number }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    if (videoRef.current && stream) videoRef.current.srcObject = stream;
-  }, [stream]);
-  const outer = PREVIEW_SIZE + RING_PADDING * 2;
-  return (
-    <div className="relative shrink-0" style={{ width: outer, height: outer }}>
-      <CircularProgressRing progress={progress} size={outer} strokeWidth={2} />
-      <div
-        className="absolute overflow-hidden rounded-full bg-black"
-        style={{ inset: RING_PADDING, width: PREVIEW_SIZE, height: PREVIEW_SIZE }}
-      >
-        <video ref={videoRef} autoPlay muted playsInline className="h-full w-full scale-x-[-1] object-cover" />
-      </div>
     </div>
   );
 }
@@ -101,14 +79,7 @@ export function RecordingBar({
         {formatTimer(elapsedSeconds)}
       </span>
 
-      {mode === 'voice' ? (
-        <LevelBars stream={audioStream} />
-      ) : (
-        <>
-          <CameraPreview stream={videoStream} progress={durationProgress} />
-          <span className="flex-1" />
-        </>
-      )}
+      <LevelBars stream={audioStream} />
 
       {locked ? (
         <span className="flex shrink-0 items-center gap-1 text-xs text-accent">

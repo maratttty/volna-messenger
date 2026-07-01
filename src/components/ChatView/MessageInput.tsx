@@ -5,6 +5,7 @@ import { useAudioRecorder } from '../../hooks/useAudioRecorder';
 import { useVideoRecorder } from '../../hooks/useVideoRecorder';
 import { RecordButton, CANCEL_THRESHOLD_PX } from './RecordButton';
 import { RecordingBar } from './RecordingBar';
+import { VideoNoteOverlay } from './VideoNoteOverlay';
 import { EmojiGifPicker } from './EmojiGifPicker';
 import type { GifResult } from '../../lib/giphy';
 import type { Message } from '../../types/database';
@@ -210,9 +211,23 @@ export function MessageInput({
   }
 
   const isRecording = active.isRecording;
+  const isVideoRecording = mode === 'video' && isRecording;
 
   return (
     <div className="pb-safe relative border-t border-border bg-surface px-3 py-3">
+      {/* Full-screen overlay during video-note recording */}
+      {isVideoRecording && (
+        <VideoNoteOverlay
+          stream={video.stream}
+          elapsedSeconds={video.elapsedSeconds}
+          maxDurationSeconds={video.maxDurationSeconds}
+          cancelProgress={cancelProgress}
+          locked={locked}
+          onCancel={() => { active.cancel(); setLocked(false); }}
+          onCancelLocked={handleCancelLocked}
+          onSendLocked={() => void handleSendLocked()}
+        />
+      )}
       {pickerOpen && (
         <EmojiGifPicker
           onSelectEmoji={handleSelectEmoji}
@@ -282,19 +297,24 @@ export function MessageInput({
           </>
         )}
 
-        {isRecording ? (
+        {isRecording && !isVideoRecording ? (
+          // Voice recording: show waveform bar inline
           <div className="flex-1 overflow-hidden">
             <RecordingBar
-              mode={mode}
-              elapsedSeconds={active.elapsedSeconds}
-              maxDurationSeconds={active.maxDurationSeconds}
+              mode="voice"
+              elapsedSeconds={audio.elapsedSeconds}
+              maxDurationSeconds={audio.maxDurationSeconds}
               cancelProgress={cancelProgress}
               locked={locked}
               onCancelLocked={handleCancelLocked}
-              audioStream={mode === 'voice' ? audio.stream : null}
-              videoStream={mode === 'video' ? video.stream : null}
+              audioStream={audio.stream}
+              videoStream={null}
             />
           </div>
+        ) : isVideoRecording ? (
+          // Video recording: the overlay covers the screen; show a minimal
+          // placeholder so the RecordButton stays in place for gesture capture.
+          <div className="flex-1" />
         ) : (
           <textarea
             ref={textareaRef}
