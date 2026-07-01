@@ -13,6 +13,7 @@ export interface Profile {
   avatar_url: string | null;
   bio: string | null;
   last_seen_at: string;
+  show_last_seen: boolean;
   privacy: { online: 'everyone' | 'contacts' | 'nobody'; avatar: 'everyone' | 'contacts' | 'nobody' };
   created_at: string;
 }

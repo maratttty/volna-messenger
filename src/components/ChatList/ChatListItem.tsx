@@ -41,7 +41,9 @@ export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListI
 
   const title     = chat.type === 'direct' ? chat.otherUser?.display_name ?? '...' : chat.title ?? 'Группа';
   const avatarSrc = chat.type === 'direct' ? chat.otherUser?.avatar_url : chat.avatar_url;
-  const online    = chat.type === 'direct' ? isOnline(chat.otherUser?.last_seen_at) : undefined;
+  const online    = chat.type === 'direct' && chat.otherUser?.show_last_seen !== false
+    ? isOnline(chat.otherUser?.last_seen_at)
+    : undefined;
   const time      = chat.lastMessage?.created_at ?? chat.created_at;
   const isPinned  = !!chat.pinned_at;
 

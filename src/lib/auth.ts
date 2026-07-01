@@ -33,13 +33,14 @@ export async function sendPasswordReset(email: string) {
 
 export async function updateProfile(
   userId: string,
-  fields: { username?: string; displayName?: string; avatarUrl?: string; bio?: string },
+  fields: { username?: string; displayName?: string; avatarUrl?: string; bio?: string; showLastSeen?: boolean },
 ): Promise<void> {
-  const update: Record<string, string> = {};
+  const update: Record<string, unknown> = {};
   if (fields.username !== undefined) update.username = fields.username.toLowerCase().trim();
   if (fields.displayName !== undefined) update.display_name = fields.displayName.trim();
   if (fields.avatarUrl !== undefined) update.avatar_url = fields.avatarUrl;
   if (fields.bio !== undefined) update.bio = fields.bio.trim();
+  if (fields.showLastSeen !== undefined) update.show_last_seen = fields.showLastSeen;
 
   const { error } = await supabase.from('profiles').update(update).eq('id', userId);
   if (error) throw error;

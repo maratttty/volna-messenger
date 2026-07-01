@@ -17,6 +17,8 @@ export default function Settings() {
   const [displayName, setDisplayName] = useState(profile?.display_name ?? '');
   const [username, setUsername] = useState(profile?.username ?? '');
   const [bio, setBio] = useState(profile?.bio ?? '');
+  const [showLastSeen, setShowLastSeen] = useState(profile?.show_last_seen ?? true);
+  const [togglingLastSeen, setTogglingLastSeen] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(profile?.avatar_url ?? null);
   const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
   const [usernameError, setUsernameError] = useState<string | null>(null);
@@ -54,6 +56,20 @@ export default function Settings() {
     }
     setUsernameError(null);
     return true;
+  }
+
+  async function handleToggleShowLastSeen() {
+    const next = !showLastSeen;
+    setShowLastSeen(next);
+    setTogglingLastSeen(true);
+    try {
+      await updateProfile(session!.user.id, { showLastSeen: next });
+      await refreshProfile();
+    } catch {
+      setShowLastSeen(!next);
+    } finally {
+      setTogglingLastSeen(false);
+    }
   }
 
   async function handleSave() {
@@ -163,6 +179,23 @@ export default function Settings() {
             {saving && <Spinner className="h-4 w-4" />}
             {saving ? 'Сохраняем…' : 'Сохранить'}
           </button>
+
+          <div className="border-t border-border pt-4">
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">Приватность</p>
+            <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-text">Показывать время визита</p>
+                <p className="mt-0.5 text-xs text-text-muted">Другие увидят, когда вы были в сети</p>
+              </div>
+              <button
+                onClick={() => void handleToggleShowLastSeen()}
+                disabled={togglingLastSeen}
+                className={`relative ml-4 h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 ${showLastSeen ? 'bg-accent' : 'bg-border'}`}
+              >
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${showLastSeen ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+          </div>
 
           <button
             onClick={() => void signOut()}

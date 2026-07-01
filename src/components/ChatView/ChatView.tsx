@@ -10,6 +10,7 @@ import { useMessages } from '../../hooks/useMessages';
 import { useTyping } from '../../hooks/useTyping';
 import { forwardMessage, fetchMessageById } from '../../lib/messages';
 import { fetchChatMembers, pinMessage, unpinMessage } from '../../lib/chats';
+import { formatLastSeen } from '../../lib/time';
 import { useChatStore } from '../../store/chat-store';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -196,7 +197,8 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
 
   const title = chat.type === 'direct' ? chat.otherUser?.display_name ?? '…' : chat.title ?? 'Группа';
   const avatarSrc = chat.type === 'direct' ? chat.otherUser?.avatar_url : chat.avatar_url;
-  const online = chat.type === 'direct' ? isOnline(chat.otherUser?.last_seen_at) : undefined;
+  const otherShowsStatus = chat.otherUser?.show_last_seen !== false;
+  const online = chat.type === 'direct' && otherShowsStatus ? isOnline(chat.otherUser?.last_seen_at) : undefined;
 
   const subtitle = useMemo(() => {
     if (loading) {
@@ -207,10 +209,12 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
       return <span className="text-accent">{names.join(', ')} печатает…</span>;
     }
     if (chat.type === 'direct') {
-      return online ? 'в сети' : 'не в сети';
+      if (online) return 'в сети';
+      if (!otherShowsStatus) return 'не в сети';
+      return formatLastSeen(chat.otherUser?.last_seen_at) ?? 'не в сети';
     }
     return pluralizeMembers(members.length);
-  }, [loading, typingUsers, chat.type, online, members.length]);
+  }, [loading, typingUsers, chat.type, online, otherShowsStatus, chat.otherUser?.last_seen_at, members.length]);
 
   // Group-only: who sent each message, shown above incoming bubbles (direct
   // chats never pass this — there's only one other person, already named in
