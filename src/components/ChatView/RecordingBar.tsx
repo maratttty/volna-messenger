@@ -1,16 +1,13 @@
-import { useRef } from 'react';
 import { ChevronLeft, Lock, Trash2 } from 'lucide-react';
 import { useAudioLevel } from '../../hooks/useAudioLevel';
 
 interface RecordingBarProps {
-  mode: 'voice';
   elapsedSeconds: number;
   maxDurationSeconds: number;
   cancelProgress: number;
   locked: boolean;
   onCancelLocked: () => void;
   audioStream: MediaStream | null;
-  videoStream: null;
 }
 
 function formatTimer(seconds: number): string {
@@ -26,7 +23,6 @@ function LevelBars({ stream }: { stream: MediaStream | null }) {
   return (
     <div className="flex h-6 flex-1 items-center gap-[2px]">
       {Array.from({ length: LEVEL_BAR_COUNT }).map((_, i) => {
-        // Bars toward the middle react slightly more, like a simple VU meter.
         const distanceFromCenter = Math.abs(i - LEVEL_BAR_COUNT / 2) / (LEVEL_BAR_COUNT / 2);
         const sensitivity = 1 - distanceFromCenter * 0.4;
         const height = Math.max(3, level * sensitivity * 24);
@@ -43,17 +39,14 @@ function LevelBars({ stream }: { stream: MediaStream | null }) {
 }
 
 export function RecordingBar({
-  mode,
   elapsedSeconds,
   maxDurationSeconds,
   cancelProgress,
   locked,
   onCancelLocked,
   audioStream,
-  videoStream,
 }: RecordingBarProps) {
   const nearCancel = cancelProgress > 0.5;
-  const durationProgress = elapsedSeconds / maxDurationSeconds;
 
   return (
     <div

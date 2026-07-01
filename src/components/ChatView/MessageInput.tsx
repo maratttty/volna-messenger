@@ -56,10 +56,10 @@ export function MessageInput({
 
   // Wire auto-stop (max duration reached) to the same finishRecording path
   // as a normal release. Use a ref so the callbacks always see latest state.
-  const finishRecordingRef = useRef<() => Promise<void>>();
+  const finishRecordingRef = useRef<(() => Promise<void>) | undefined>(undefined);
   useEffect(() => {
-    audio.onMaxDurationRef.current = () => finishRecordingRef.current?.() ?? Promise.resolve();
-    video.onMaxDurationRef.current = () => finishRecordingRef.current?.() ?? Promise.resolve();
+    audio.onMaxDurationRef.current = async () => { await finishRecordingRef.current?.(); };
+    video.onMaxDurationRef.current = async () => { await finishRecordingRef.current?.(); };
   });
 
   // Pre-fills the textarea when an edit starts, and clears it again when the
@@ -301,14 +301,12 @@ export function MessageInput({
           // Voice recording: show waveform bar inline
           <div className="flex-1 overflow-hidden">
             <RecordingBar
-              mode="voice"
               elapsedSeconds={audio.elapsedSeconds}
               maxDurationSeconds={audio.maxDurationSeconds}
               cancelProgress={cancelProgress}
               locked={locked}
               onCancelLocked={handleCancelLocked}
               audioStream={audio.stream}
-              videoStream={null}
             />
           </div>
         ) : isVideoRecording ? (
