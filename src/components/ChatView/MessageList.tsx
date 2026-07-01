@@ -134,7 +134,7 @@ export function MessageList({
   }
 
   return (
-    <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto py-2">
+    <div ref={containerRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto py-2">
       <div ref={topSentinelRef} />
       {loadingMore && (
         <div className="flex justify-center py-2">
