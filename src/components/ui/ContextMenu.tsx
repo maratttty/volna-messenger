@@ -30,15 +30,17 @@ export function ContextMenu({ x, y, items, onClose, quickReactions, onQuickReact
     visible: false,
   });
 
-  // Anchored at the tap/click point, which can land near any screen edge —
-  // measure once mounted and clamp so the menu never overflows the viewport.
+  // Position menu at the tap point. If it would overflow the bottom of the
+  // screen, flip it above the tap point instead (so reactions row is reachable).
   useLayoutEffect(() => {
     const el = menuRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const left = Math.min(x, window.innerWidth - rect.width - MARGIN);
-    const top = Math.min(y, window.innerHeight - rect.height - MARGIN);
-    setPos({ left: Math.max(MARGIN, left), top: Math.max(MARGIN, top), visible: true });
+    // Prefer showing below; flip above if there isn't enough room.
+    const fitsBelow = y + rect.height + MARGIN <= window.innerHeight;
+    const top = fitsBelow ? y : Math.max(MARGIN, y - rect.height);
+    setPos({ left: Math.max(MARGIN, left), top, visible: true });
   }, [x, y]);
 
   useEffect(() => {
