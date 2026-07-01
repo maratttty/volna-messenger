@@ -54,3 +54,48 @@ body {
   background: var(--color-border);
   border-radius: 4px;
 }
+
+/* ── Animation keyframes ─────────────────────────────────────── */
+@keyframes fw-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes fw-slide-up {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+@keyframes fw-slide-right {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes fw-pop {
+  0%   { opacity: 0; transform: scale(0.5); }
+  65%  {             transform: scale(1.15); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes fw-msg {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.anim-fade-in       { animation: fw-fade-in   0.18s ease-out both; }
+.anim-slide-up      { animation: fw-slide-up  0.2s  ease-out both; }
+.anim-slide-right   { animation: fw-slide-right 0.22s ease-out both; }
+.anim-pop           { animation: fw-pop       0.22s ease-out both; }
+.anim-msg           { animation: fw-msg       0.18s ease-out both; }
+
+/* Subtle press-down feedback on interactive elements (transform-only = GPU, no layout) */
+button:active:not(:disabled),
+[role="button"]:active {
+  transform: scale(0.96);
+  transition: transform 0.08s ease-out;
+}
+
+/* Respect the system "reduce motion" accessibility preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:       0.01ms !important;
+    animation-iteration-count: 1     !important;
+    transition-duration:      0.01ms !important;
+  }
+}

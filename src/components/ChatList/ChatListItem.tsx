@@ -116,7 +116,7 @@ export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListI
       <button
         {...handleTriggerProps()}
         onClick={onClick}
-        className={`flex w-full items-center gap-3 px-4 py-3 text-left transition ${
+        className={`flex w-full items-center gap-3 px-4 py-3 text-left transition active:scale-[0.98] active:bg-surface-hover ${
           active ? 'bg-surface-hover' : 'hover:bg-surface-hover'
         }`}
       >
@@ -133,7 +133,7 @@ export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListI
           <div className="flex items-baseline justify-between gap-2">
             <p className="truncate text-xs text-text-muted">{previewText(chat)}</p>
             {chat.unreadCount > 0 && (
-              <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+              <span className={`anim-pop shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
                 chat.muted ? 'bg-text-muted/30 text-text-muted' : 'bg-accent text-bg'
               }`}>
                 {chat.unreadCount > 99 ? '99+' : chat.unreadCount}

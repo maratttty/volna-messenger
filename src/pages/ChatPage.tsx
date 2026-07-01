@@ -165,7 +165,7 @@ export default function ChatPage() {
               <div className="relative">
                 <Icon size={20} />
                 {badge > 0 && (
-                  <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
+                  <span className="anim-pop absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
                     {badge > 99 ? '99+' : badge}
                   </span>
                 )}
@@ -193,6 +193,7 @@ export default function ChatPage() {
           • Chat open       → fills remaining space next to sidebar
       */}
       {activeChat && session ? (
+        <div key={activeChat.id} className="flex flex-1 flex-col md:anim-slide-right anim-slide-right overflow-hidden">
         <ChatView
           key={activeChat.id}
           chat={activeChat}
@@ -201,6 +202,7 @@ export default function ChatPage() {
           currentUserDisplayName={profile?.display_name ?? ''}
           onBack={() => setActiveChatId(null)}
         />
+        </div>
       ) : (
         // Desktop-only empty state; on mobile the sidebar is full-screen so this is never visible
         <main className="hidden md:flex md:flex-1 md:flex-col md:items-center md:justify-center text-text-muted">

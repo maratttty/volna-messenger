@@ -46,7 +46,7 @@ export function EmojiGifPicker({ onSelectEmoji, onSelectGif, onClose }: EmojiGif
   return (
     <div
       ref={panelRef}
-      className="absolute bottom-full left-0 z-20 mb-2 flex h-80 w-80 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-xl"
+      className="anim-slide-up absolute bottom-full left-0 z-20 mb-2 flex h-80 w-80 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-xl"
     >
       <div className="flex shrink-0 border-b border-border">
         <button

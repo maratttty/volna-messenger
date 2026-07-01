@@ -54,7 +54,7 @@ export function VideoNoteOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center transition-colors duration-300"
+      className="anim-fade-in fixed inset-0 z-50 flex flex-col items-center justify-center transition-colors duration-300"
       style={{ background: flash ? 'rgba(255,255,255,0.97)' : 'rgba(0,0,0,0.82)' }}
     >
       {/* ── Swipe hints (hidden in locked mode) ─────────────────────── */}

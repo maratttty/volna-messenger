@@ -150,7 +150,7 @@ export function MessageList({
               if (el) rowRefs.current.set(msg.id, el);
               else rowRefs.current.delete(msg.id);
             }}
-            className={`transition-colors duration-500 ${flashId === msg.id ? 'bg-accent/15' : ''}`}
+            className={`anim-msg transition-colors duration-500 ${flashId === msg.id ? 'bg-accent/15' : ''}`}
           >
             <MessageBubble
               message={msg}

@@ -60,7 +60,16 @@ export function ContextMenu({ x, y, items, onClose, quickReactions, onQuickReact
     >
       <div
         ref={menuRef}
-        style={{ left: pos.left, top: pos.top, opacity: pos.visible ? 1 : 0 }}
+        style={{
+          left: pos.left,
+          top: pos.top,
+          // CSS transition on scale+opacity: invisible until positioned,
+          // then smoothly springs open from 90 % scale.
+          opacity:    pos.visible ? 1 : 0,
+          transform:  pos.visible ? 'scale(1)'    : 'scale(0.9)',
+          transformOrigin: 'top left',
+          transition: pos.visible ? 'opacity 0.15s ease-out, transform 0.15s ease-out' : 'none',
+        }}
         className="fixed min-w-[180px] overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
