@@ -11,6 +11,7 @@ import { NewGroupModal } from '../components/ChatList/NewGroupModal';
 import { APP_NAME } from '../config';
 import { getNotificationPermission, isNotificationSupported, requestNotificationPermission } from '../lib/notifications';
 import { InstallBanner } from '../components/ui/InstallBanner';
+import { UpdateBanner } from '../components/ui/UpdateBanner';
 
 type SidebarTab = 'chats' | 'contacts';
 
@@ -74,12 +75,13 @@ export default function ChatPage() {
           • Always          → w-72 flex      (fixed sidebar alongside chat)
       */}
       <aside
-        className={[
-          'flex flex-col border-r border-border bg-surface',
+        className={
           activeChatId
-            ? 'hidden md:flex md:w-72 md:shrink-0'   // mobile: gone; desktop: fixed
-            : 'w-full md:w-72 md:shrink-0',           // mobile: full; desktop: fixed
-        ].join(' ')}
+            // Mobile: hidden. Desktop: fixed 288px sidebar
+            ? 'hidden md:flex md:w-72 md:shrink-0 flex-col border-r border-border bg-surface'
+            // Mobile: full-screen list. Desktop: fixed 288px sidebar
+            : 'flex w-full md:w-72 md:shrink-0 flex-col border-r border-border bg-surface'
+        }
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -103,6 +105,7 @@ export default function ChatPage() {
           </div>
         </div>
 
+        <UpdateBanner />
         <InstallBanner />
 
         {showNotifBanner && (
