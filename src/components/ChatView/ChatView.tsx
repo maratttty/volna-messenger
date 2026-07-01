@@ -199,6 +199,9 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
   const online = chat.type === 'direct' ? isOnline(chat.otherUser?.last_seen_at) : undefined;
 
   const subtitle = useMemo(() => {
+    if (loading) {
+      return <span className="animate-pulse text-text-muted">загрузка…</span>;
+    }
     if (typingUsers.size > 0) {
       const names = Array.from(typingUsers.values());
       return <span className="text-accent">{names.join(', ')} печатает…</span>;
@@ -207,7 +210,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
       return online ? 'в сети' : 'не в сети';
     }
     return pluralizeMembers(members.length);
-  }, [typingUsers, chat.type, online, members.length]);
+  }, [loading, typingUsers, chat.type, online, members.length]);
 
   // Group-only: who sent each message, shown above incoming bubbles (direct
   // chats never pass this — there's only one other person, already named in

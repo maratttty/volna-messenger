@@ -76,17 +76,25 @@ export function ChatList({ chats, activeChatId, onSelect, loading, currentUserId
 
       <div className="flex-1 overflow-y-auto">
         {loading ? (
-          <div className="px-4 py-6 text-center text-sm text-text-muted">Загрузка чатов…</div>
+          <div className="flex flex-col items-center justify-center gap-3 py-16 text-text-muted">
+            <Spinner className="h-8 w-8" />
+            <span className="text-sm">Загрузка чатов…</span>
+          </div>
         ) : (
           <>
-            {filtered.map((chat) => (
-              <ChatListItem
+            {filtered.map((chat, idx) => (
+              <div
                 key={chat.id}
+                className="anim-slide-up"
+                style={{ animationDelay: `${Math.min(idx, 12) * 25}ms` }}
+              >
+              <ChatListItem
                 chat={chat}
                 active={chat.id === activeChatId}
                 currentUserId={currentUserId}
                 onClick={() => onSelect(chat.id)}
               />
+              </div>
             ))}
 
             {searchingUsers && (

@@ -12,6 +12,7 @@ import { APP_NAME } from '../config';
 import { getNotificationPermission, isNotificationSupported, requestNotificationPermission } from '../lib/notifications';
 import { InstallBanner } from '../components/ui/InstallBanner';
 import { UpdateBanner } from '../components/ui/UpdateBanner';
+import { Spinner } from '../components/ui/Spinner';
 
 type SidebarTab = 'chats' | 'contacts';
 
@@ -51,6 +52,16 @@ export default function ChatPage() {
 
   const activeChat = chats.find((c) => c.id === activeChatId);
   const totalUnread = chats.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
+
+  // Full-screen splash while chats load for the very first time
+  if (loading && chats.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-bg anim-fade-in">
+        <Spinner className="h-10 w-10" />
+        <p className="text-sm font-medium text-text-muted">{APP_NAME}</p>
+      </div>
+    );
+  }
 
   async function handleGroupCreated(chatId: string) {
     setShowNewGroup(false);

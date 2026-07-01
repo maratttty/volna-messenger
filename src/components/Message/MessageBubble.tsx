@@ -153,8 +153,8 @@ export function MessageBubble({
         {...(canActOn ? menu.triggerProps : {})}
         className={
           isVideoNote
-            ? `flex flex-col items-${isOwn ? 'end' : 'start'} ${isPending ? 'opacity-60' : ''}`
-            : `max-w-[75%] rounded-2xl px-3 py-2 ${isOwn ? 'bg-bubble-out text-text' : 'bg-bubble-in text-text'} ${isPending ? 'opacity-60' : ''}`
+            ? `select-none flex flex-col items-${isOwn ? 'end' : 'start'} ${isPending ? 'opacity-60' : ''}`
+            : `select-none max-w-[75%] rounded-2xl px-3 py-2 ${isOwn ? 'bg-bubble-out text-text' : 'bg-bubble-in text-text'} ${isPending ? 'opacity-60' : ''}`
         }
       >
         {message.forwarded_from_name && (
