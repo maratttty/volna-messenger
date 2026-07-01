@@ -191,7 +191,7 @@ export function MessageInput({
   const isRecording = active.isRecording;
 
   return (
-    <div className="relative border-t border-border bg-surface px-3 py-3">
+    <div className="pb-safe relative border-t border-border bg-surface px-3 py-3">
       {pickerOpen && (
         <EmojiGifPicker
           onSelectEmoji={handleSelectEmoji}

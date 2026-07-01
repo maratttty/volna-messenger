@@ -21,13 +21,26 @@ html,
 body,
 #root {
   height: 100%;
+  /* dvh adjusts when the mobile keyboard opens so input isn't covered */
+  min-height: 100dvh;
   margin: 0;
+  overflow: hidden;
 }
 
 body {
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   background: var(--color-bg);
   color: var(--color-text);
+  /* Prevent bounce-scroll on iOS which looks wrong in an app */
+  overscroll-behavior: none;
+}
+
+/* Safe-area utilities for iPhone notch / home-bar */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 * {

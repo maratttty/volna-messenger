@@ -10,6 +10,7 @@ import { ChatView } from '../components/ChatView/ChatView';
 import { NewGroupModal } from '../components/ChatList/NewGroupModal';
 import { APP_NAME } from '../config';
 import { getNotificationPermission, isNotificationSupported, requestNotificationPermission } from '../lib/notifications';
+import { InstallBanner } from '../components/ui/InstallBanner';
 
 type SidebarTab = 'chats' | 'contacts';
 
@@ -87,6 +88,8 @@ export default function ChatPage() {
           </div>
         </div>
 
+        <InstallBanner />
+
         {showNotifBanner && (
           <div className="flex items-center gap-2 border-b border-border bg-surface-hover px-3 py-2 text-xs text-text">
             <Bell size={14} className="shrink-0 text-accent" />
@@ -126,8 +129,8 @@ export default function ChatPage() {
           )}
         </div>
 
-        {/* Bottom tab bar */}
-        <div className="flex items-center border-t border-border bg-surface">
+        {/* Bottom tab bar — pb-safe adds padding for iPhone home indicator */}
+        <div className="pb-safe flex items-center border-t border-border bg-surface">
           {(
             [
               { id: 'chats',    Icon: MessageSquare, label: 'Чаты',     badge: totalUnread },
