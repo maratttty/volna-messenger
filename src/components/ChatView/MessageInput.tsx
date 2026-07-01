@@ -53,6 +53,14 @@ export function MessageInput({
   const video = useVideoRecorder();
   const active = mode === 'voice' ? audio : video;
 
+  // Wire auto-stop (max duration reached) to the same finishRecording path
+  // as a normal release. Use a ref so the callbacks always see latest state.
+  const finishRecordingRef = useRef<() => Promise<void>>();
+  useEffect(() => {
+    audio.onMaxDurationRef.current = () => finishRecordingRef.current?.() ?? Promise.resolve();
+    video.onMaxDurationRef.current = () => finishRecordingRef.current?.() ?? Promise.resolve();
+  });
+
   // Pre-fills the textarea when an edit starts, and clears it again when the
   // edit ends (saved or canceled) — both collapse to editingMessage becoming null.
   useEffect(() => {
@@ -147,7 +155,11 @@ export function MessageInput({
   async function finishRecording() {
     if (mode === 'voice') {
       const result = await audio.stop();
-      if (!result || result.durationSeconds < 1) return;
+      if (!result) return;
+      if (result.durationSeconds < 0.5) {
+        setError('Запись слишком короткая — удерживайте кнопку дольше');
+        return;
+      }
       try {
         await onSendVoice(result.blob, result.durationSeconds);
       } catch {
@@ -155,14 +167,23 @@ export function MessageInput({
       }
     } else {
       const result = await video.stop();
-      if (!result || result.durationSeconds < 1) return;
+      if (!result) return;
+      if (result.durationSeconds < 0.5) {
+        setError('Запись слишком короткая — удерживайте кнопку дольше');
+        return;
+      }
       try {
         await onSendVideoNote(result.blob, result.durationSeconds, result.mimeType);
       } catch {
         setError('Не удалось отправить видео-кружок');
       }
     }
+    setLocked(false);
   }
+
+  // Keep the ref up to date every render so auto-stop always calls
+  // the latest version of finishRecording (with correct mode in closure).
+  finishRecordingRef.current = finishRecording;
 
   async function handleHoldEnd(canceled: boolean) {
     setCancelProgress(0);
