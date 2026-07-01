@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, UsersRound, X, MessageSquare, Users, Settings } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,12 +13,23 @@ import { getNotificationPermission, isNotificationSupported, requestNotification
 
 type SidebarTab = 'chats' | 'contacts';
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const fn = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, []);
+  return isMobile;
+}
+
 export default function ChatPage() {
   const { session, profile, signOut } = useAuth();
   const navigate = useNavigate();
   const { chats, loading, reload } = useChats();
   const { activeChatId, setActiveChatId } = useChatStore();
   const [activeTab, setActiveTab] = useState<SidebarTab>('chats');
+  const isMobile = useIsMobile();
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [notifPermission, setNotifPermission] = useState(getNotificationPermission());
   const [notifDismissed, setNotifDismissed] = useState(false);
@@ -46,10 +57,15 @@ export default function ChatPage() {
     setActiveTab('chats');
   }
 
+  // On mobile: show sidebar when no chat selected, show chat fullscreen when chat selected.
+  // On desktop: show both side-by-side always.
+  const showSidebar = !isMobile || !activeChatId;
+  const showChat = !!activeChat && !!session;
+
   return (
     <div className="flex h-full">
       {/* Sidebar */}
-      <aside className="flex w-72 shrink-0 flex-col border-r border-border bg-surface">
+      <aside className={`${showSidebar ? 'flex' : 'hidden'} ${isMobile ? 'w-full' : 'w-72 shrink-0'} flex-col border-r border-border bg-surface`}>
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <span className="font-semibold text-text">{APP_NAME}</span>
           <div className="flex items-center gap-1">
@@ -147,15 +163,16 @@ export default function ChatPage() {
       </aside>
 
       {/* Main content */}
-      {activeChat && session ? (
+      {showChat ? (
         <ChatView
-          key={activeChat.id}
-          chat={activeChat}
+          key={activeChat!.id}
+          chat={activeChat!}
           chats={chats}
-          currentUserId={session.user.id}
+          currentUserId={session!.user.id}
           currentUserDisplayName={profile?.display_name ?? ''}
+          onBack={isMobile ? () => setActiveChatId(null) : undefined}
         />
-      ) : (
+      ) : !isMobile ? (
         <main className="flex flex-1 flex-col items-center justify-center text-text-muted">
           <div className="text-center">
             <div className="mb-3 text-4xl">💬</div>
@@ -163,7 +180,7 @@ export default function ChatPage() {
             <p className="mt-1 text-sm">или начните новый разговор</p>
           </div>
         </main>
-      )}
+      ) : null}
 
       {showNewGroup && session && (
         <NewGroupModal

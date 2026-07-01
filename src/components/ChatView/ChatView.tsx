@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback, useEffect } from 'react';
 import {
-  Search, Pin, X,
+  Search, Pin, X, ArrowLeft,
   Gamepad2, Pencil, Car, Star, Music, Cloud, Gift, Heart,
   Plane, Rocket, Crown, Zap, Sun, Coffee, Umbrella, Camera,
 } from 'lucide-react';
@@ -24,6 +24,7 @@ interface ChatViewProps {
   chats: ChatWithMeta[];
   currentUserId: string;
   currentUserDisplayName: string;
+  onBack?: () => void;
 }
 
 function isOnline(lastSeenAt: string | undefined): boolean {
@@ -118,7 +119,7 @@ function pinnedPreviewText(message: Message): string {
   }
 }
 
-export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }: ChatViewProps) {
+export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, onBack }: ChatViewProps) {
   const {
     messages,
     hasMore,
@@ -310,7 +311,15 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName }:
 
   return (
     <div className="flex h-full flex-1 flex-col">
-      <div className="flex items-center gap-3 border-b border-border bg-surface px-4 py-3">
+      <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-3 md:px-4">
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="shrink-0 rounded-full p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text"
+          >
+            <ArrowLeft size={20} />
+          </button>
+        )}
         {chat.type === 'group' ? (
           <button
             onClick={() => setMembersOpen(true)}
