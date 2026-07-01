@@ -1,20 +1,47 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { ChatListItem } from './ChatListItem';
 import { searchUsers, getOrCreateDirectChat } from '../../lib/chats';
 import { Avatar } from '../ui/Avatar';
 import { Spinner } from '../ui/Spinner';
 import type { ChatWithMeta, Profile } from '../../types/database';
 
+// Shimmer skeleton row shown when there is no cached data yet (first visit).
+function SkeletonRow({ delay }: { delay: number }) {
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-3"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div className="h-10 w-10 shrink-0 rounded-full bg-surface-hover animate-pulse" />
+      <div className="flex flex-1 flex-col gap-2">
+        <div className="h-3 w-3/4 rounded-full bg-surface-hover animate-pulse" />
+        <div className="h-2.5 w-1/2 rounded-full bg-surface-hover animate-pulse" />
+      </div>
+      <div className="h-2 w-8 rounded-full bg-surface-hover animate-pulse" />
+    </div>
+  );
+}
+
 interface ChatListProps {
   chats: ChatWithMeta[];
   activeChatId: string | null;
   onSelect: (chatId: string) => void;
+  /** True only when NO cache exists — shows skeletons */
   loading: boolean;
   currentUserId: string;
+  query: string;
+  onQueryChange: (q: string) => void;
 }
 
-export function ChatList({ chats, activeChatId, onSelect, loading, currentUserId }: ChatListProps) {
-  const [query, setQuery] = useState('');
+export function ChatList({
+  chats,
+  activeChatId,
+  onSelect,
+  loading,
+  currentUserId,
+  query,
+  onQueryChange,
+}: ChatListProps) {
   const [userResults, setUserResults] = useState<Profile[]>([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [startingChatWith, setStartingChatWith] = useState<string | null>(null);
@@ -23,19 +50,14 @@ export function ChatList({ chats, activeChatId, onSelect, loading, currentUserId
     if (!query.trim()) return chats;
     const q = query.toLowerCase();
     return chats.filter((c) => {
-      const title = c.type === 'direct' ? c.otherUser?.display_name ?? '' : c.title ?? '';
+      const title    = c.type === 'direct' ? c.otherUser?.display_name ?? '' : c.title ?? '';
       const username = c.type === 'direct' ? c.otherUser?.username ?? '' : '';
       return title.toLowerCase().includes(q) || username.toLowerCase().includes(q);
     });
   }, [chats, query]);
 
-  // Beyond existing chats, also search the user directory by username so you
-  // can start a brand-new conversation right from this same search box.
   useEffect(() => {
-    if (query.trim().length < 2) {
-      setUserResults([]);
-      return;
-    }
+    if (query.trim().length < 2) { setUserResults([]); return; }
     setSearchingUsers(true);
     const t = setTimeout(async () => {
       try {
@@ -53,7 +75,7 @@ export function ChatList({ chats, activeChatId, onSelect, loading, currentUserId
     setStartingChatWith(user.id);
     try {
       const chatId = await getOrCreateDirectChat(currentUserId, user.id);
-      setQuery('');
+      onQueryChange('');
       onSelect(chatId);
     } finally {
       setStartingChatWith(null);
@@ -62,76 +84,66 @@ export function ChatList({ chats, activeChatId, onSelect, loading, currentUserId
 
   const showEmptyState = filtered.length === 0 && userResults.length === 0 && !searchingUsers;
 
-  return (
-    <div className="flex h-full flex-col">
-      <div className="px-3 py-2">
-        <input
-          type="text"
-          placeholder="Поиск чатов и пользователей"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
-        />
-      </div>
-
+  // First visit, no cache — show skeletons
+  if (loading && chats.length === 0) {
+    return (
       <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-16 text-text-muted">
-            <Spinner className="h-8 w-8" />
-            <span className="text-sm">Загрузка чатов…</span>
-          </div>
-        ) : (
-          <>
-            {filtered.map((chat, idx) => (
-              <div
-                key={chat.id}
-                className="anim-slide-up"
-                style={{ animationDelay: `${Math.min(idx, 12) * 25}ms` }}
-              >
-              <ChatListItem
-                chat={chat}
-                active={chat.id === activeChatId}
-                currentUserId={currentUserId}
-                onClick={() => onSelect(chat.id)}
-              />
-              </div>
-            ))}
-
-            {searchingUsers && (
-              <div className="flex justify-center py-3">
-                <Spinner className="h-4 w-4" />
-              </div>
-            )}
-
-            {userResults.length > 0 && (
-              <div className="mt-1">
-                <p className="px-4 py-1 text-xs font-medium text-text-muted">Пользователи</p>
-                {userResults.map((user) => (
-                  <button
-                    key={user.id}
-                    onClick={() => void handleStartChat(user)}
-                    disabled={startingChatWith !== null}
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-surface-hover disabled:opacity-50"
-                  >
-                    <Avatar name={user.display_name} src={user.avatar_url} size="sm" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-text">{user.display_name}</p>
-                      <p className="truncate text-xs text-text-muted">@{user.username}</p>
-                    </div>
-                    {startingChatWith === user.id && <Spinner className="h-4 w-4" />}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {showEmptyState && (
-              <div className="px-4 py-6 text-center text-sm text-text-muted">
-                {query ? 'Ничего не найдено' : 'Пока нет чатов'}
-              </div>
-            )}
-          </>
-        )}
+        {Array.from({ length: 8 }).map((_, i) => (
+          <SkeletonRow key={i} delay={i * 40} />
+        ))}
       </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      {filtered.map((chat, idx) => (
+        <div
+          key={chat.id}
+          className="anim-slide-up"
+          style={{ animationDelay: `${Math.min(idx, 10) * 20}ms` }}
+        >
+          <ChatListItem
+            chat={chat}
+            active={chat.id === activeChatId}
+            currentUserId={currentUserId}
+            onClick={() => onSelect(chat.id)}
+          />
+        </div>
+      ))}
+
+      {searchingUsers && (
+        <div className="flex justify-center py-3">
+          <Spinner className="h-4 w-4" />
+        </div>
+      )}
+
+      {userResults.length > 0 && (
+        <div className="mt-1">
+          <p className="px-4 py-1 text-xs font-medium text-text-muted">Пользователи</p>
+          {userResults.map((user) => (
+            <button
+              key={user.id}
+              onClick={() => void handleStartChat(user)}
+              disabled={startingChatWith !== null}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-surface-hover disabled:opacity-50"
+            >
+              <Avatar name={user.display_name} src={user.avatar_url} size="sm" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-text">{user.display_name}</p>
+                <p className="truncate text-xs text-text-muted">@{user.username}</p>
+              </div>
+              {startingChatWith === user.id && <Spinner className="h-4 w-4" />}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {showEmptyState && (
+        <div className="px-4 py-6 text-center text-sm text-text-muted">
+          {query ? 'Ничего не найдено' : 'Пока нет чатов'}
+        </div>
+      )}
     </div>
   );
 }

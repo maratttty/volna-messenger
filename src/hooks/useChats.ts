@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { fetchChats } from '../lib/chats';
+import { saveChatsCache, loadChatsCache } from '../lib/chats-cache';
 import { markMessageDelivered } from '../lib/messages';
 import { showMessageNotification } from '../lib/notifications';
 import { onNetworkRecovery } from '../lib/network';
@@ -19,20 +20,32 @@ function shouldNotify(chat: ChatWithMeta, message: Message, userId: string): boo
 export function useChats() {
   const { session } = useAuth();
   const { chats, setChats, upsertChat, patchChat } = useChatStore();
-  const [loading, setLoading] = useState(true);
+  // loading = true only when there is NO cache (skeleton mode)
+  // isRefreshing = true when fetching fresh data in the background (cache is shown)
+  const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const userId = session?.user.id;
 
   const reload = useCallback(async () => {
     if (!userId) return;
     const data = await fetchChats(userId);
     setChats(data);
+    saveChatsCache(userId, data);
   }, [userId, setChats]);
 
   useEffect(() => {
     if (!userId) return;
 
-    setLoading(true);
-    void reload().finally(() => setLoading(false));
+    // Stale-while-revalidate: show cached data immediately, fetch fresh in background
+    const cached = loadChatsCache(userId);
+    if (cached && cached.length > 0) {
+      setChats(cached);         // instant render from cache
+      setIsRefreshing(true);    // show "обновление..." indicator
+      void reload().finally(() => setIsRefreshing(false));
+    } else {
+      setLoading(true);         // no cache → show skeletons until data arrives
+      void reload().finally(() => setLoading(false));
+    }
 
     let everConnected = false;
 
@@ -128,5 +141,5 @@ export function useChats() {
     };
   }, [userId, reload, upsertChat, patchChat]);
 
-  return { chats, reload, loading };
+  return { chats, reload, loading, isRefreshing };
 }

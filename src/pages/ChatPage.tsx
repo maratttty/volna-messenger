@@ -8,20 +8,19 @@ import { ChatList } from '../components/ChatList/ChatList';
 import { ContactsPanel } from '../components/ChatList/ContactsPanel';
 import { ChatView } from '../components/ChatView/ChatView';
 import { NewGroupModal } from '../components/ChatList/NewGroupModal';
-import { APP_NAME } from '../config';
 import { getNotificationPermission, isNotificationSupported, requestNotificationPermission } from '../lib/notifications';
 import { InstallBanner } from '../components/ui/InstallBanner';
 import { UpdateBanner } from '../components/ui/UpdateBanner';
-import { Spinner } from '../components/ui/Spinner';
 
 type SidebarTab = 'chats' | 'contacts';
 
 export default function ChatPage() {
   const { session, profile, signOut } = useAuth();
   const navigate = useNavigate();
-  const { chats, loading, reload } = useChats();
+  const { chats, loading, isRefreshing, reload } = useChats();
   const { activeChatId, setActiveChatId } = useChatStore();
   const [activeTab, setActiveTab] = useState<SidebarTab>('chats');
+  const [query, setQuery] = useState('');
   const [showNewGroup, setShowNewGroup] = useState(false);
   const [notifPermission, setNotifPermission] = useState(getNotificationPermission());
   const [notifDismissed, setNotifDismissed] = useState(false);
@@ -53,15 +52,6 @@ export default function ChatPage() {
   const activeChat = chats.find((c) => c.id === activeChatId);
   const totalUnread = chats.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
 
-  // Full-screen splash while chats load for the very first time
-  if (loading && chats.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 bg-bg anim-fade-in">
-        <Spinner className="h-10 w-10" />
-        <p className="text-sm font-medium text-text-muted">{APP_NAME}</p>
-      </div>
-    );
-  }
 
   async function handleGroupCreated(chatId: string) {
     setShowNewGroup(false);
@@ -95,25 +85,48 @@ export default function ChatPage() {
         }
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="font-semibold text-text">{APP_NAME}</span>
-          <div className="flex items-center gap-1">
-            {activeTab === 'chats' && (
+        <div className="border-b border-border px-4 pb-2 pt-3">
+          {/* Title row */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-xl font-bold text-text">
+                {activeTab === 'chats' ? 'Чаты' : activeTab === 'contacts' ? 'Контакты' : 'Чаты'}
+              </h1>
+              {/* "обновление..." — only while background refresh is running */}
+              {isRefreshing && activeTab === 'chats' && (
+                <span className="text-[11px] text-text-muted animate-pulse">обновление…</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              {activeTab === 'chats' && (
+                <button
+                  onClick={() => setShowNewGroup(true)}
+                  title="Новая группа"
+                  className="rounded-md p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text"
+                >
+                  <UsersRound size={16} />
+                </button>
+              )}
               <button
-                onClick={() => setShowNewGroup(true)}
-                title="Новая группа"
-                className="rounded-md p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text"
+                onClick={() => void signOut()}
+                className="rounded-md px-2 py-1 text-xs text-text-muted transition hover:bg-surface-hover hover:text-text"
               >
-                <UsersRound size={16} />
+                Выйти
               </button>
-            )}
-            <button
-              onClick={() => void signOut()}
-              className="rounded-md px-2 py-1 text-xs text-text-muted transition hover:bg-surface-hover hover:text-text"
-            >
-              Выйти
-            </button>
+            </div>
           </div>
+          {/* Search bar — under the title */}
+          {(activeTab === 'chats' || activeTab === 'contacts') && (
+            <div className="mt-2">
+              <input
+                type="text"
+                placeholder="Поиск чатов и пользователей"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
+              />
+            </div>
+          )}
         </div>
 
         <UpdateBanner />
@@ -147,6 +160,8 @@ export default function ChatPage() {
               onSelect={setActiveChatId}
               loading={loading}
               currentUserId={session.user.id}
+              query={query}
+              onQueryChange={setQuery}
             />
           )}
           {session && activeTab === 'contacts' && (
