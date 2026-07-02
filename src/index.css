@@ -33,6 +33,10 @@ body {
   color: var(--color-text);
   /* Prevent bounce-scroll on iOS which looks wrong in an app */
   overscroll-behavior: none;
+  /* Block pinch-zoom at CSS level (belt-and-suspenders with viewport meta) */
+  touch-action: pan-x pan-y;
+  /* Prevent iOS tap highlight */
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Safe-area utilities for iPhone notch / home-bar */
