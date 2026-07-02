@@ -16,6 +16,7 @@ import { uploadAttachment } from '../lib/storage';
 import { onNetworkRecovery } from '../lib/network';
 import { fetchReactions, groupReactions, setReaction, removeReaction } from '../lib/reactions';
 import { useMessageStore } from '../store/message-store';
+import { useChatStore } from '../store/chat-store';
 import type { Message, MessageStatusValue, MessageType, ReactionSummary } from '../types/database';
 
 export function useMessages(chatId: string | null, currentUserId: string | undefined) {
@@ -68,6 +69,9 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         if (cancelled) return;
         setMessages(chatId, page, more);
         void markChatRead(chatId, currentUserId);
+        // Reset local unread counter immediately so badge disappears at once
+        const lastMsg = page[page.length - 1];
+        if (lastMsg) useChatStore.getState().markRead(chatId, lastMsg.id);
         void refreshStatuses(page);
         void refreshReactions(page);
       })
@@ -88,6 +92,8 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       merged.sort((a, b) => a.created_at.localeCompare(b.created_at));
       setMessages(chatId, merged, useMessageStore.getState().hasMore[chatId] ?? false);
       void markChatRead(chatId, currentUserId);
+      const lastMerged = merged[merged.length - 1];
+      if (lastMerged) useChatStore.getState().markRead(chatId, lastMerged.id);
       void refreshStatuses(merged);
       void refreshReactions(merged);
     }
@@ -107,6 +113,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
           appendMessage(chatId, msg);
           if (msg.sender_id !== currentUserId) {
             void markMessageRead(msg.id, currentUserId);
+            useChatStore.getState().markRead(chatId, msg.id);
           }
         },
       )
