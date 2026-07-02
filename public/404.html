@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script>
+    var l = window.location;
+    l.replace(
+      l.protocol + '//' + l.host + '/volna-messenger/' +
+      '?p=' + encodeURIComponent(l.pathname.slice('/volna-messenger/'.length) + l.search) +
+      l.hash
+    );
+  </script>
+</head>
+<body></body>
+</html>
