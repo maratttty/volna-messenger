@@ -243,7 +243,8 @@ export async function markChatRead(chatId: string, userId: string): Promise<void
     .select('id')
     .eq('chat_id', chatId)
     .eq('deleted', false)
-    .neq('sender_id', userId);
+    .neq('sender_id', userId)
+    .order('created_at', { ascending: true });
 
   if (!unread || unread.length === 0) return;
 
@@ -256,12 +257,23 @@ export async function markChatRead(chatId: string, userId: string): Promise<void
 
   await supabase.from('message_status').upsert(statusRows, { onConflict: 'message_id,user_id' });
 
-  const lastId = unread[unread.length - 1].id;
-  await supabase
-    .from('chat_members')
-    .update({ last_read_message_id: lastId })
+  // Get the actual latest message in the chat (including own) for the cursor
+  const { data: latestMsg } = await supabase
+    .from('messages')
+    .select('id')
     .eq('chat_id', chatId)
-    .eq('user_id', userId);
+    .eq('deleted', false)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestMsg) {
+    await supabase
+      .from('chat_members')
+      .update({ last_read_message_id: latestMsg.id })
+      .eq('chat_id', chatId)
+      .eq('user_id', userId);
+  }
 }
 
 export async function markMessageRead(messageId: string, userId: string): Promise<void> {
