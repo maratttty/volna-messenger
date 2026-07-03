@@ -12,7 +12,6 @@ export interface ContextMenuItem {
 
 interface ContextMenuProps {
   anchorRect: DOMRect;
-  align?: 'left' | 'right';
   items: ContextMenuItem[];
   onClose: () => void;
   quickReactions?: string[];
@@ -20,12 +19,11 @@ interface ContextMenuProps {
 }
 
 const MARGIN = 8;
-const GAP = 4;
+const GAP = 6;
 const MORE_REACTIONS = ['😢', '🙏', '🎉', '👏', '💯', '😍', '🤔', '😅', '👎', '💔', '😡', '🤩'];
 
 export function ContextMenu({
   anchorRect,
-  align = 'left',
   items,
   onClose,
   quickReactions,
@@ -33,9 +31,10 @@ export function ContextMenu({
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [showMore, setShowMore] = useState(false);
-  const [pos, setPos] = useState<{ left: number; top: number; visible: boolean }>({
+  const [pos, setPos] = useState<{ left: number; top: number; origin: string; visible: boolean }>({
     left: 0,
     top: 0,
+    origin: 'bottom center',
     visible: false,
   });
 
@@ -43,27 +42,33 @@ export function ContextMenu({
     const el = menuRef.current;
     if (!el) return;
 
-    // offsetWidth/offsetHeight ignore CSS transforms — always returns real dimensions
     const w = el.offsetWidth;
     const h = el.offsetHeight;
 
-    // Vertical: prefer below anchor, flip above if more space there
-    const spaceBelow = window.innerHeight - anchorRect.bottom - GAP;
+    // Center horizontally over the bubble, clamped to viewport
+    let left = anchorRect.left + (anchorRect.width - w) / 2;
+    left = Math.max(MARGIN, Math.min(left, window.innerWidth - w - MARGIN));
+
+    // Prefer above the bubble; flip below only if not enough space above
     const spaceAbove = anchorRect.top - GAP;
+    const spaceBelow = window.innerHeight - anchorRect.bottom - GAP;
     let top: number;
-    if (h <= spaceBelow || spaceBelow >= spaceAbove) {
-      top = anchorRect.bottom + GAP;
-    } else {
+    let origin: string;
+    if (h <= spaceAbove) {
       top = anchorRect.top - h - GAP;
+      origin = 'bottom center';
+    } else if (h <= spaceBelow) {
+      top = anchorRect.bottom + GAP;
+      origin = 'top center';
+    } else {
+      // Not enough room either way — go above and clamp
+      top = anchorRect.top - h - GAP;
+      origin = 'bottom center';
     }
     top = Math.max(MARGIN, Math.min(top, window.innerHeight - h - MARGIN));
 
-    // Horizontal: align right edge to right of bubble for own msgs, left edge to left for others
-    let left = align === 'right' ? anchorRect.right - w : anchorRect.left;
-    left = Math.max(MARGIN, Math.min(left, window.innerWidth - w - MARGIN));
-
-    setPos({ left, top, visible: true });
-  }, [anchorRect, align, showMore]);
+    setPos({ left, top, origin, visible: true });
+  }, [anchorRect, showMore]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -73,7 +78,7 @@ export function ContextMenu({
 
   return (
     <div
-      className="fixed inset-0 z-50"
+      className="fixed inset-0 z-50 bg-black/40"
       onClick={onClose}
       onContextMenu={(e) => { e.preventDefault(); onClose(); }}
     >
@@ -84,13 +89,13 @@ export function ContextMenu({
           left: pos.left,
           top: pos.top,
           opacity: pos.visible ? 1 : 0,
-          transform: pos.visible ? 'scale(1)' : 'scale(0.92)',
-          transformOrigin: `top ${align}`,
+          transform: pos.visible ? 'scale(1)' : 'scale(0.88)',
+          transformOrigin: pos.origin,
           transition: pos.visible
             ? 'opacity 0.15s ease-out, transform 0.15s ease-out'
             : 'none',
         }}
-        className="w-[220px] overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl"
+        className="min-w-[160px] max-w-[240px] overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Quick reactions row */}

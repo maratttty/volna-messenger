@@ -214,7 +214,6 @@ export function MessageBubble({
       {menu.position && bubbleRef.current && createPortal(
         <ContextMenu
           anchorRect={bubbleRef.current.getBoundingClientRect()}
-          align={isOwn ? 'right' : 'left'}
           items={menuItems}
           onClose={menu.close}
           quickReactions={canActOn ? QUICK_REACTIONS : undefined}
