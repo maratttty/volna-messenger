@@ -21,7 +21,7 @@ import { useChatStore } from '../store/chat-store';
 import type { Message, MessageStatusValue, MessageType, ReactionSummary } from '../types/database';
 
 export function useMessages(chatId: string | null, currentUserId: string | undefined) {
-  const { messages, hasMore, setMessages, prependMessages, appendMessage, updateMessage } =
+  const { messages, hasMore, setMessages, prependMessages, appendMessage, updateMessage, removeMessage } =
     useMessageStore();
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -123,7 +123,15 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` },
-        (payload) => updateMessage(chatId, payload.new as Message),
+        (payload) => {
+          const updated = payload.new as Message;
+          // Deleted messages vanish entirely (Telegram-style), no "deleted" placeholder
+          if (updated.deleted) {
+            if (chatId) removeMessage(chatId, updated.id);
+          } else {
+            updateMessage(chatId, updated);
+          }
+        },
       )
       .on(
         'postgres_changes',
@@ -330,8 +338,11 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
   }, []);
 
   const remove = useCallback(async (messageId: string) => {
+    if (!chatId) return;
     await deleteMessage(messageId);
-  }, []);
+    // Remove immediately from local store — don't wait for the realtime UPDATE
+    useMessageStore.getState().removeMessage(chatId, messageId);
+  }, [chatId]);
 
   // "Delete for me" — hides the message only in this user's view, no
   // realtime event involved (it's a private per-user list, not a row change

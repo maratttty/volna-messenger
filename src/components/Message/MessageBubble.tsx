@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Paperclip, Reply, Pencil, Trash2, Forward, Pin, PinOff, Copy } from 'lucide-react';
 import type { Message, MessageStatusValue, ReactionSummary } from '../../types/database';
 import { formatMessageTime } from '../../lib/time';
@@ -140,14 +141,14 @@ export function MessageBubble({
 
   const menuItems: ContextMenuItem[] = canActOn
     ? [
-        { label: 'Ответить', icon: Reply, onClick: () => onReply(message) },
-        ...(canEdit ? [{ label: 'Редактировать', icon: Pencil, onClick: () => onEdit(message) }] : []),
+        { label: 'Ответить',    icon: Reply,   onClick: () => onReply(message) },
+        { label: 'Переслать',   icon: Forward, onClick: () => onForward(message) },
         ...(canCopy ? [{ label: 'Копировать', icon: Copy, onClick: () => { void navigator.clipboard.writeText(message.content!); } }] : []),
-        { label: 'Переслать', icon: Forward, onClick: () => onForward(message) },
+        ...(canEdit ? [{ label: 'Редактировать', icon: Pencil, onClick: () => onEdit(message) }] : []),
         isPinned
           ? { label: 'Открепить', icon: PinOff, onClick: onTogglePin }
-          : { label: 'Закрепить', icon: Pin, onClick: onTogglePin },
-        { label: 'Удалить', icon: Trash2, onClick: () => onDelete(message), danger: true },
+          : { label: 'Закрепить', icon: Pin,    onClick: onTogglePin },
+        ...(isOwn ? [{ label: 'Удалить', icon: Trash2, onClick: () => onDelete(message), danger: true }] : []),
       ]
     : [];
 
@@ -210,7 +211,7 @@ export function MessageBubble({
           {isOwn && !isPending && <StatusTicks status={status} />}
         </div>
       </div>
-      {menu.position && bubbleRef.current && (
+      {menu.position && bubbleRef.current && createPortal(
         <ContextMenu
           anchorRect={bubbleRef.current.getBoundingClientRect()}
           align={isOwn ? 'right' : 'left'}
@@ -218,7 +219,8 @@ export function MessageBubble({
           onClose={menu.close}
           quickReactions={canActOn ? QUICK_REACTIONS : undefined}
           onQuickReact={onToggleReaction}
-        />
+        />,
+        document.body,
       )}
     </div>
   );
