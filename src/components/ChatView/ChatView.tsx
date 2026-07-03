@@ -121,9 +121,11 @@ function pinnedPreviewText(message: Message): string {
 }
 
 export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, onBack }: ChatViewProps) {
-  // Capture the read cursor at the moment the chat is opened (before markChatRead
-  // resets it) so MessageList can scroll to the first unread message.
+  // Capture both the read cursor and the unread count at the moment the chat is
+  // opened — before markChatRead resets them — so MessageList can scroll to the
+  // first unread message and show the correct badge on the ↓ button.
   const initialLastReadId = useRef(chat.last_read_message_id ?? null);
+  const initialUnreadCount = useRef(chat.unreadCount ?? 0);
 
   const {
     messages,
@@ -419,6 +421,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
           onTogglePin={(message) => void handleTogglePin(message)}
           highlightMessageId={highlightMessageId}
           initialLastReadId={initialLastReadId.current}
+          initialUnreadCount={initialUnreadCount.current}
         />
       </div>
 
