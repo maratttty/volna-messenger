@@ -69,10 +69,15 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       .then(({ messages: page, hasMore: more }) => {
         if (cancelled) return;
         setMessages(chatId, page, more);
-        void markChatRead(chatId, currentUserId);
-        // Reset local unread counter immediately so badge disappears at once
+        // Persist the read cursor immediately (one fast row update) so that the
+        // correct position survives a page refresh even if markChatRead is slow.
         const lastMsg = page[page.length - 1];
-        if (lastMsg) useChatStore.getState().markRead(chatId, lastMsg.id);
+        if (lastMsg) {
+          void updateReadCursor(chatId, currentUserId, lastMsg.id);
+          useChatStore.getState().markRead(chatId, lastMsg.id);
+        }
+        // Slow path: update individual message_status rows for ✓✓ sender receipts
+        void markChatRead(chatId, currentUserId);
         void refreshStatuses(page);
         void refreshReactions(page);
       })
@@ -92,9 +97,12 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       }
       merged.sort((a, b) => a.created_at.localeCompare(b.created_at));
       setMessages(chatId, merged, useMessageStore.getState().hasMore[chatId] ?? false);
-      void markChatRead(chatId, currentUserId);
       const lastMerged = merged[merged.length - 1];
-      if (lastMerged) useChatStore.getState().markRead(chatId, lastMerged.id);
+      if (lastMerged) {
+        void updateReadCursor(chatId, currentUserId, lastMerged.id);
+        useChatStore.getState().markRead(chatId, lastMerged.id);
+      }
+      void markChatRead(chatId, currentUserId);
       void refreshStatuses(merged);
       void refreshReactions(merged);
     }

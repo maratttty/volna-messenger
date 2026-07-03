@@ -24,15 +24,11 @@ interface MessageListProps {
   pinnedMessageId: string | null;
   onTogglePin: (message: Message) => void;
   highlightMessageId?: string | null;
-  // Captured at the moment the chat was opened (before markChatRead resets it)
+  // Captured at chat-open time before markChatRead resets the cursor
   initialLastReadId?: string | null;
-  // Unread count captured at chat-open time — initialises the ↓ badge
+  // Unread count at chat-open time — seeds the ↓ badge
   initialUnreadCount?: number;
 }
-
-// Approximate height of the "Непрочитанные сообщения" divider (px).
-// Used to leave space above the first unread bubble.
-const DIVIDER_H = 44;
 
 export function MessageList({
   messages,
@@ -60,63 +56,64 @@ export function MessageList({
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const containerRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
+  // Attached to the "Непрочитанные сообщения" divider for scroll targeting.
+  // offsetTop is layout-based and unaffected by CSS transforms on ancestors
+  // (getBoundingClientRect would be wrong when a parent has anim-slide-right).
+  const dividerRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const prevScrollHeight = useRef(0);
   const prevMessageCountRef = useRef(0);
   const didInitialScroll = useRef(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [flashId, setFlashId] = useState<string | null>(null);
-  // Starts with initialUnreadCount so the ↓ badge is visible right away.
-  // Increments as new messages arrive while the user is scrolled up.
+  // Initialised with the unread count at open time so the ↓ badge is shown
+  // immediately. Increments when new messages arrive while scrolled away.
   // Resets to 0 when the user reaches the bottom.
   const [newWhileAway, setNewWhileAway] = useState(initialUnreadCount);
 
-  // The ID of the first message the user hasn't read yet, used to:
-  //   1. Render the "Непрочитанные сообщения" divider before it
-  //   2. Set the initial scroll position
+  // The first INCOMING (not own) message after the read cursor.
+  // Own messages are never "unread" for the sender, so they are skipped.
   const firstUnreadId = useMemo<string | null>(() => {
     if (messages.length === 0) return null;
 
-    if (!initialLastReadId) {
-      // No cursor at all — treat the whole page as unread if the count says so
-      return initialUnreadCount > 0 ? messages[0].id : null;
+    // Determine where to start searching for unread incoming messages.
+    let startIdx = 0;
+    if (initialLastReadId) {
+      const idx = messages.findIndex((m) => m.id === initialLastReadId);
+      if (idx !== -1) {
+        startIdx = idx + 1;
+        if (startIdx >= messages.length) return null; // everything is read
+      }
+      // idx === -1: cursor is older than this page — search from index 0
     }
 
-    const idx = messages.findIndex((m) => m.id === initialLastReadId);
-    if (idx === -1) {
-      // Cursor is older than the loaded page → all loaded messages are unread
-      return initialUnreadCount > 0 ? messages[0].id : null;
+    for (let i = startIdx; i < messages.length; i++) {
+      if (messages[i].sender_id !== currentUserId) {
+        return messages[i].id;
+      }
     }
-    if (idx >= messages.length - 1) return null; // everything is read
-    return messages[idx + 1].id;
-  }, [messages, initialLastReadId, initialUnreadCount]);
+    return null;
+  }, [messages, initialLastReadId, currentUserId]);
 
-  // One-time initial scroll. Runs BEFORE the browser paints (useLayoutEffect)
-  // so the user never sees the wrong scroll position even for a single frame.
+  // One-time initial scroll. Runs BEFORE paint (useLayoutEffect) so the user
+  // never sees the wrong position. Uses dividerRef.offsetTop which is
+  // layout-relative (not viewport-relative) — safe even during slide animations.
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el || didInitialScroll.current || messages.length === 0) return;
     didInitialScroll.current = true;
 
-    if (firstUnreadId) {
-      const firstUnreadEl = rowRefs.current.get(firstUnreadId);
-      if (firstUnreadEl) {
-        // With scrollTop still at 0, getBoundingClientRect values equal the
-        // element's distance from the viewport top — so the difference is the
-        // offset of the target inside the scroll container.
-        const containerTop = el.getBoundingClientRect().top;
-        const targetTop = firstUnreadEl.getBoundingClientRect().top;
-        el.scrollTop = Math.max(0, targetTop - containerTop - DIVIDER_H);
-        setIsNearBottom(false);
-        return;
-      }
+    if (dividerRef.current) {
+      // Scroll so the "Непрочитанные сообщения" divider appears at the top.
+      el.scrollTop = dividerRef.current.offsetTop;
+      setIsNearBottom(false);
+      return;
     }
-
-    // No unread (or cursor not in this page) → jump straight to the bottom.
+    // Nothing unread → jump to the very bottom.
     el.scrollTop = el.scrollHeight;
   }, [messages, firstUnreadId]);
 
-  // Auto-scroll to bottom when new messages arrive — only while already near bottom.
+  // Auto-scroll to bottom when new messages arrive while the user is near bottom.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -136,7 +133,7 @@ export function MessageList({
     }
   }, [messages, isNearBottom, highlightMessageId, currentUserId]);
 
-  // Scroll to and briefly flash a search/reply-jump result.
+  // Scroll to and briefly flash a search/reply-jump target.
   useEffect(() => {
     if (!highlightMessageId) return;
     const el = rowRefs.current.get(highlightMessageId);
@@ -147,7 +144,7 @@ export function MessageList({
     return () => clearTimeout(timer);
   }, [highlightMessageId, messages]);
 
-  // Preserve scroll position when older messages are prepended (scroll-up pagination).
+  // Preserve scroll position when older messages are prepended (infinite-scroll up).
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -207,60 +204,72 @@ export function MessageList({
   }
 
   return (
-    <div ref={containerRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto py-2">
-      <div ref={topSentinelRef} />
-      {loadingMore && (
-        <div className="flex justify-center py-2">
-          <Spinner className="h-4 w-4" />
-        </div>
-      )}
-      {messages.map((msg) => {
-        const repliedMessage = msg.reply_to_id ? messageById.get(msg.reply_to_id) : undefined;
-        return (
-          <Fragment key={msg.id}>
-            {firstUnreadId === msg.id && (
-              <div className="flex items-center gap-3 px-4 py-2.5">
-                <div className="h-px flex-1 bg-accent/50" />
-                <span className="rounded-full bg-accent/15 px-3 py-0.5 text-xs font-medium text-accent">
-                  Непрочитанные сообщения
-                </span>
-                <div className="h-px flex-1 bg-accent/50" />
+    // Outer wrapper: relative so the ↓ button is positioned relative to the
+    // visible chat area, not to the scrollable content inside it.
+    <div className="relative min-h-0 flex-1">
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        // position:relative so that child offsetTop values are relative to THIS
+        // container (needed for the dividerRef.offsetTop scroll calculation).
+        className="relative h-full overflow-y-auto py-2"
+      >
+        <div ref={topSentinelRef} />
+        {loadingMore && (
+          <div className="flex justify-center py-2">
+            <Spinner className="h-4 w-4" />
+          </div>
+        )}
+        {messages.map((msg) => {
+          const repliedMessage = msg.reply_to_id ? messageById.get(msg.reply_to_id) : undefined;
+          return (
+            <Fragment key={msg.id}>
+              {firstUnreadId === msg.id && (
+                <div ref={dividerRef} className="flex items-center gap-3 px-4 py-2.5">
+                  <div className="h-px flex-1 bg-accent/50" />
+                  <span className="rounded-full bg-accent/15 px-3 py-0.5 text-xs font-medium text-accent">
+                    Непрочитанные сообщения
+                  </span>
+                  <div className="h-px flex-1 bg-accent/50" />
+                </div>
+              )}
+              <div
+                ref={(el) => {
+                  if (el) rowRefs.current.set(msg.id, el);
+                  else rowRefs.current.delete(msg.id);
+                }}
+                className={`transition-colors duration-500 ${flashId === msg.id ? 'bg-accent/15' : ''}`}
+              >
+                <MessageBubble
+                  message={msg}
+                  isOwn={msg.sender_id === currentUserId}
+                  status={statuses.get(msg.id)}
+                  senderName={msg.sender_id ? senderNames?.get(msg.sender_id) : undefined}
+                  repliedMessage={repliedMessage}
+                  repliedSenderName={repliedMessage ? resolveSenderName(repliedMessage.sender_id) : undefined}
+                  reactions={reactions.get(msg.id)}
+                  isPinned={pinnedMessageId === msg.id}
+                  onReply={onReply}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  onForward={onForward}
+                  onJumpToMessage={onJumpToMessage}
+                  onToggleReaction={(emoji) => onToggleReaction(msg.id, emoji)}
+                  onTogglePin={() => onTogglePin(msg)}
+                />
               </div>
-            )}
-            <div
-              ref={(el) => {
-                if (el) rowRefs.current.set(msg.id, el);
-                else rowRefs.current.delete(msg.id);
-              }}
-              className={`transition-colors duration-500 ${flashId === msg.id ? 'bg-accent/15' : ''}`}
-            >
-              <MessageBubble
-                message={msg}
-                isOwn={msg.sender_id === currentUserId}
-                status={statuses.get(msg.id)}
-                senderName={msg.sender_id ? senderNames?.get(msg.sender_id) : undefined}
-                repliedMessage={repliedMessage}
-                repliedSenderName={repliedMessage ? resolveSenderName(repliedMessage.sender_id) : undefined}
-                reactions={reactions.get(msg.id)}
-                isPinned={pinnedMessageId === msg.id}
-                onReply={onReply}
-                onEdit={onEdit}
-                onDelete={onDelete}
-                onForward={onForward}
-                onJumpToMessage={onJumpToMessage}
-                onToggleReaction={(emoji) => onToggleReaction(msg.id, emoji)}
-                onTogglePin={() => onTogglePin(msg)}
-              />
-            </div>
-          </Fragment>
-        );
-      })}
+            </Fragment>
+          );
+        })}
+      </div>
 
-      {/* Floating ↓ button — visible when scrolled up; badge shows unread count */}
+      {/* Floating ↓ button — positioned relative to the outer wrapper (NOT the
+          scroll container), so it stays fixed in the bottom-right corner of the
+          visible chat area regardless of how far the user has scrolled. */}
       {!isNearBottom && (
         <button
           onClick={scrollToBottom}
-          className="anim-pop absolute bottom-4 right-4 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface text-text-muted shadow-lg transition hover:bg-surface-hover hover:text-text"
+          className="anim-pop absolute bottom-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface text-text-muted shadow-lg transition hover:bg-surface-hover hover:text-text"
         >
           <ChevronDown size={20} />
           {newWhileAway > 0 && (
