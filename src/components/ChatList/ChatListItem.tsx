@@ -150,7 +150,6 @@ export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListI
       {menu.position && buttonRef.current && (
         <ContextMenu
           anchorRect={buttonRef.current.getBoundingClientRect()}
-          align="left"
           items={menuItems}
           onClose={menu.close}
         />
