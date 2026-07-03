@@ -276,6 +276,18 @@ export async function markChatRead(chatId: string, userId: string): Promise<void
   }
 }
 
+// Advances the per-member read cursor in chat_members so fetchChats reports
+// the correct unread count on next load/refresh. Called whenever a message is
+// visibly read (on chat open via markChatRead, and on each incoming realtime
+// message while the chat is open).
+export async function updateReadCursor(chatId: string, userId: string, messageId: string): Promise<void> {
+  await supabase
+    .from('chat_members')
+    .update({ last_read_message_id: messageId })
+    .eq('chat_id', chatId)
+    .eq('user_id', userId);
+}
+
 export async function markMessageRead(messageId: string, userId: string): Promise<void> {
   await supabase
     .from('message_status')

@@ -69,7 +69,11 @@ export function useChats() {
           const fresh = await fetchChats(userId);
           const updated = fresh.find((c) => c.id === newMessage.chat_id);
           if (updated) {
-            upsertChat(updated);
+            // If this chat is open and the tab is visible the user is already
+            // reading it — don't let a stale DB count overwrite the local 0.
+            const isReading =
+              useChatStore.getState().activeChatId === updated.id && !document.hidden;
+            upsertChat(isReading ? { ...updated, unreadCount: 0 } : updated);
             // Mark "delivered" as soon as it reaches any open client of ours,
             // regardless of whether that chat is the one currently open.
             if (newMessage.sender_id !== userId) {

@@ -10,6 +10,7 @@ import {
   hideMessageForMe,
   markChatRead,
   markMessageRead,
+  updateReadCursor,
   fetchOwnMessageStatuses,
 } from '../lib/messages';
 import { uploadAttachment } from '../lib/storage';
@@ -113,6 +114,8 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
           appendMessage(chatId, msg);
           if (msg.sender_id !== currentUserId) {
             void markMessageRead(msg.id, currentUserId);
+            // Persist cursor to DB so fetchChats reports the right count on refresh
+            if (chatId) void updateReadCursor(chatId, currentUserId, msg.id);
             useChatStore.getState().markRead(chatId, msg.id);
           }
         },
