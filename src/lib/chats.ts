@@ -110,11 +110,12 @@ export async function fetchChats(userId: string): Promise<ChatWithMeta[]> {
       return {
         ...chat,
         otherUser,
-        lastMessage:  lastMsgs?.[0] ?? undefined,
-        unreadCount:  unreadResult.count ?? 0,
-        myRole:       (membership?.role as MemberRole) ?? 'member',
-        muted:        (membership?.muted as boolean) ?? false,
-        pinned_at:    (membership?.pinned_at as string | null) ?? null,
+        lastMessage:           lastMsgs?.[0] ?? undefined,
+        unreadCount:           unreadResult.count ?? 0,
+        myRole:                (membership?.role as MemberRole) ?? 'member',
+        muted:                 (membership?.muted as boolean) ?? false,
+        pinned_at:             (membership?.pinned_at as string | null) ?? null,
+        last_read_message_id:  lastReadId,
       } as ChatWithMeta;
     }),
   );

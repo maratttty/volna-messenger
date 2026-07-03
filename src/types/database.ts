@@ -120,7 +120,8 @@ export interface ChatWithMeta extends Chat {
   unreadCount: number;
   myRole: MemberRole;
   muted: boolean;
-  pinned_at: string | null;  // from chat_members; null = not pinned
+  pinned_at: string | null;           // from chat_members; null = not pinned
+  last_read_message_id: string | null; // read cursor for this user
 }
 
 export interface Database {

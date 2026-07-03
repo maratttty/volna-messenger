@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { MessageBubble } from '../Message/MessageBubble';
 import { Spinner } from '../ui/Spinner';
 import type { Message, MessageStatusValue, ReactionSummary } from '../../types/database';
@@ -12,7 +13,7 @@ interface MessageListProps {
   loadingMore: boolean;
   loading: boolean;
   onLoadMore: () => void;
-  senderNames?: Map<string, string>; // for group chats
+  senderNames?: Map<string, string>;
   resolveSenderName: (senderId: string | null) => string;
   onReply: (message: Message) => void;
   onEdit: (message: Message) => void;
@@ -23,6 +24,9 @@ interface MessageListProps {
   pinnedMessageId: string | null;
   onTogglePin: (message: Message) => void;
   highlightMessageId?: string | null;
+  // The last_read_message_id captured at the moment the chat was opened —
+  // used to scroll to the first unread message on initial load.
+  initialLastReadId?: string | null;
 }
 
 export function MessageList({
@@ -45,34 +49,67 @@ export function MessageList({
   pinnedMessageId,
   onTogglePin,
   highlightMessageId,
+  initialLastReadId,
 }: MessageListProps) {
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const containerRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const prevScrollHeight = useRef(0);
-  const prevMessageCount = useRef(0);
+  const prevMessageCountRef = useRef(0);
+  // Becomes true after the one-time initial scroll (to first unread or bottom).
+  const didInitialScroll = useRef(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [flashId, setFlashId] = useState<string | null>(null);
+  // Count of incoming messages that arrived while the user was scrolled up.
+  const [newWhileAway, setNewWhileAway] = useState(0);
 
-  // Auto-scroll to bottom on first load and on new messages, only if the
-  // user was already near the bottom (don't yank them down mid-scrollback).
-  // Suppressed while a search jump is pending/settling — a jump can prepend
-  // several older pages via ensureMessageLoaded, which would otherwise also
-  // look like "grew while near bottom" and yank the view back down.
+  // One-time scroll: when messages first populate, jump to the first unread
+  // message (or to the bottom if everything is already read / the read cursor
+  // is not in the current page).
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || didInitialScroll.current || messages.length === 0) return;
+    didInitialScroll.current = true;
+
+    if (initialLastReadId) {
+      const lastReadIdx = messages.findIndex((m) => m.id === initialLastReadId);
+      if (lastReadIdx !== -1 && lastReadIdx < messages.length - 1) {
+        const firstUnreadId = messages[lastReadIdx + 1].id;
+        const firstUnreadEl = rowRefs.current.get(firstUnreadId);
+        if (firstUnreadEl) {
+          firstUnreadEl.scrollIntoView({ block: 'start' });
+          setIsNearBottom(false);
+          return;
+        }
+      }
+    }
+    el.scrollTop = el.scrollHeight;
+  }, [messages, initialLastReadId]);
+
+  // Auto-scroll to bottom when new messages arrive (only if near bottom).
+  // Skips the initial batch (handled above) and search jumps.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const grew = messages.length > prevMessageCount.current;
-    prevMessageCount.current = messages.length;
-    if (grew && isNearBottom && !highlightMessageId) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [messages.length, isNearBottom, highlightMessageId]);
 
-  // Scrolls to and briefly flashes a search result once it's loaded. Depends
-  // on `messages` (not just the id) so it keeps retrying as ensureMessageLoaded
-  // prepends older pages, until the target row actually exists in the DOM.
+    const prevCount = prevMessageCountRef.current;
+    prevMessageCountRef.current = messages.length;
+    const grew = messages.length > prevCount;
+
+    // prevCount === 0 → initial batch, handled by the effect above
+    if (!grew || prevCount === 0 || highlightMessageId) return;
+
+    if (isNearBottom) {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      // Tally new incoming messages for the ↓ badge
+      const incoming = messages.slice(prevCount).filter((m) => m.sender_id !== currentUserId).length;
+      if (incoming > 0) setNewWhileAway((n) => n + incoming);
+    }
+  }, [messages, isNearBottom, highlightMessageId, currentUserId]);
+
+  // Scroll to and briefly flash a search result once it's in the DOM.
   useEffect(() => {
     if (!highlightMessageId) return;
     const el = rowRefs.current.get(highlightMessageId);
@@ -114,7 +151,16 @@ export function MessageList({
     const el = containerRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setIsNearBottom(distanceFromBottom < 150);
+    const near = distanceFromBottom < 150;
+    setIsNearBottom(near);
+    if (near) setNewWhileAway(0);
+  }
+
+  function scrollToBottom() {
+    const el = containerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    setNewWhileAway(0);
+    setIsNearBottom(true);
   }
 
   if (loading) {
@@ -172,6 +218,21 @@ export function MessageList({
           </div>
         );
       })}
+
+      {/* Floating scroll-to-bottom button — visible when the user has scrolled up */}
+      {!isNearBottom && (
+        <button
+          onClick={scrollToBottom}
+          className="anim-pop absolute bottom-4 right-4 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface text-text-muted shadow-lg transition hover:bg-surface-hover hover:text-text"
+        >
+          <ChevronDown size={20} />
+          {newWhileAway > 0 && (
+            <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-white">
+              {newWhileAway > 99 ? '99+' : newWhileAway}
+            </span>
+          )}
+        </button>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import {
   Search, Pin, X, ArrowLeft,
   Gamepad2, Pencil, Car, Star, Music, Cloud, Gift, Heart,
@@ -121,6 +121,10 @@ function pinnedPreviewText(message: Message): string {
 }
 
 export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, onBack }: ChatViewProps) {
+  // Capture the read cursor at the moment the chat is opened (before markChatRead
+  // resets it) so MessageList can scroll to the first unread message.
+  const initialLastReadId = useRef(chat.last_read_message_id ?? null);
+
   const {
     messages,
     hasMore,
@@ -414,6 +418,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
           pinnedMessageId={chat.pinned_message_id}
           onTogglePin={(message) => void handleTogglePin(message)}
           highlightMessageId={highlightMessageId}
+          initialLastReadId={initialLastReadId.current}
         />
       </div>
 
