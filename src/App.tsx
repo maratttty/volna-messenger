@@ -15,11 +15,7 @@ const Settings      = lazy(() => import('./pages/Settings'));
 
 // Minimal fallback while a lazy chunk loads (usually < 200ms on first visit)
 function PageLoader() {
-  return (
-    <div className="flex h-full items-center justify-center text-text-muted text-sm">
-      Загрузка…
-    </div>
-  );
+  return <div className="h-full bg-bg" />;
 }
 
 export default function App() {

@@ -7,7 +7,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const location = useLocation();
 
   if (loading) {
-    return <div className="flex h-full items-center justify-center text-text-muted">Загрузка…</div>;
+    return <div className="h-full bg-bg" />;
   }
   // Preserve where the user was headed (e.g. an /invite/:token link) so
   // Login/Register can send them back here once they're authenticated.
