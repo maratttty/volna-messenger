@@ -40,6 +40,7 @@ export async function fetchMessages(
     .from('messages')
     .select('*')
     .eq('chat_id', chatId)
+    .eq('deleted', false)
     .order('created_at', { ascending: false })
     .limit(PAGE_SIZE + 1);
 

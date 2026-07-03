@@ -44,7 +44,9 @@ export const useMessageStore = create<MessageStore>((set) => ({
   appendMessage: (chatId, msg) =>
     set((s) => {
       const existing = s.messages[chatId] ?? [];
-      if (existing.some((m) => m.id === msg.id)) return s;
+      if (existing.some(
+        (m) => m.id === msg.id || (msg.client_id && m.client_id === msg.client_id),
+      )) return s;
       return { messages: { ...s.messages, [chatId]: [...existing, msg] } };
     }),
 

@@ -62,33 +62,35 @@ export function useChats() {
           schema: 'public',
           table: 'messages',
         },
-        async (payload) => {
+        (payload) => {
           const newMessage = payload.new as Message;
-          // Re-fetch all chats (cheap: only called on actual new messages)
-          // A more surgical approach (upsert one chat) is an optimisation for later.
-          const fresh = await fetchChats(userId);
-          const updated = fresh.find((c) => c.id === newMessage.chat_id);
-          if (updated) {
-            // If this chat is open and the tab is visible the user is already
-            // reading it — don't let a stale DB count overwrite the local 0.
-            const isReading =
-              useChatStore.getState().activeChatId === updated.id && !document.hidden;
-            upsertChat(isReading ? { ...updated, unreadCount: 0 } : updated);
-            // Mark "delivered" as soon as it reaches any open client of ours,
-            // regardless of whether that chat is the one currently open.
-            if (newMessage.sender_id !== userId) {
+          // Update the chat list locally — no DB round trip on every message.
+          // Falls back to a full reload only if this chat isn't in the store yet.
+          const existingChat = useChatStore.getState().chats.find((c) => c.id === newMessage.chat_id);
+          if (existingChat) {
+            const isOwn = newMessage.sender_id === userId;
+            const isReading = useChatStore.getState().activeChatId === existingChat.id && !document.hidden;
+            upsertChat({
+              ...existingChat,
+              lastMessage: newMessage,
+              unreadCount: isOwn || isReading ? existingChat.unreadCount : existingChat.unreadCount + 1,
+            });
+            if (!isOwn) {
               void markMessageDelivered(newMessage.id, userId);
             }
-            if (shouldNotify(updated, newMessage, userId)) {
-              const title = updated.type === 'direct' ? updated.otherUser?.display_name ?? 'Сообщение' : updated.title ?? 'Группа';
+            if (shouldNotify(existingChat, newMessage, userId)) {
+              const title =
+                existingChat.type === 'direct'
+                  ? existingChat.otherUser?.display_name ?? 'Сообщение'
+                  : existingChat.title ?? 'Группа';
               showMessageNotification({
                 title,
                 message: newMessage,
-                onClick: () => useChatStore.getState().setActiveChatId(updated.id),
+                onClick: () => useChatStore.getState().setActiveChatId(existingChat.id),
               });
             }
           } else {
-            void reload(); // chat membership changed
+            void reload(); // new chat not yet in store — full reload
           }
         },
       )
