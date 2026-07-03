@@ -1,4 +1,4 @@
-import { useLayoutEffect, useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useEffect, useRef, useState, useCallback } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Plus } from 'lucide-react';
 
@@ -34,41 +34,58 @@ export function ContextMenu({
   const [pos, setPos] = useState<{ left: number; top: number; origin: string; visible: boolean }>({
     left: 0,
     top: 0,
-    origin: 'bottom center',
+    origin: 'top center',
     visible: false,
   });
 
-  useLayoutEffect(() => {
+  const calcPos = useCallback(() => {
     const el = menuRef.current;
     if (!el) return;
 
     const w = el.offsetWidth;
     const h = el.offsetHeight;
+    if (w === 0 || h === 0) return; // not laid out yet — RAF will retry
 
-    // Center horizontally over the bubble, clamped to viewport
+    // Use visualViewport for correct dimensions on mobile (keyboard, pinch-zoom)
+    const vw = window.visualViewport?.width ?? window.innerWidth;
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    // visualViewport may have an offset when zoomed
+    const vOffsetX = window.visualViewport?.offsetLeft ?? 0;
+    const vOffsetY = window.visualViewport?.offsetTop ?? 0;
+
+    // Center horizontally over the bubble, clamped strictly inside viewport
     let left = anchorRect.left + (anchorRect.width - w) / 2;
-    left = Math.max(MARGIN, Math.min(left, window.innerWidth - w - MARGIN));
+    left = Math.max(vOffsetX + MARGIN, Math.min(left, vOffsetX + vw - w - MARGIN));
 
-    // Prefer above the bubble; flip below only if not enough space above
-    const spaceAbove = anchorRect.top - GAP;
-    const spaceBelow = window.innerHeight - anchorRect.bottom - GAP;
+    // Prefer below; show above only if not enough space below
+    const spaceBelow = vh - (anchorRect.bottom - vOffsetY) - GAP;
+    const spaceAbove = anchorRect.top - vOffsetY - GAP;
     let top: number;
     let origin: string;
-    if (h <= spaceAbove) {
-      top = anchorRect.top - h - GAP;
-      origin = 'bottom center';
-    } else if (h <= spaceBelow) {
+
+    if (spaceBelow >= h) {
       top = anchorRect.bottom + GAP;
       origin = 'top center';
-    } else {
-      // Not enough room either way — go above and clamp
+    } else if (spaceAbove >= h) {
       top = anchorRect.top - h - GAP;
       origin = 'bottom center';
+    } else {
+      // Not enough room either way — go below, clamp into viewport
+      top = anchorRect.bottom + GAP;
+      origin = 'top center';
     }
-    top = Math.max(MARGIN, Math.min(top, window.innerHeight - h - MARGIN));
+
+    top = Math.max(vOffsetY + MARGIN, Math.min(top, vOffsetY + vh - h - MARGIN));
 
     setPos({ left, top, origin, visible: true });
-  }, [anchorRect, showMore]);
+  }, [anchorRect]);
+
+  useLayoutEffect(() => {
+    calcPos();
+    // Retry after paint in case offsetWidth/offsetHeight were 0 on first layout
+    const raf = requestAnimationFrame(calcPos);
+    return () => cancelAnimationFrame(raf);
+  }, [calcPos, showMore]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -77,17 +94,22 @@ export function ContextMenu({
   }, [onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/40"
-      onClick={onClose}
-      onContextMenu={(e) => { e.preventDefault(); onClose(); }}
-    >
+    <>
+      {/* Overlay — separate from menu so menu's position:fixed uses the viewport, not this element */}
+      <div
+        className="fixed inset-0 z-50 bg-black/40"
+        onClick={onClose}
+        onContextMenu={(e) => { e.preventDefault(); onClose(); }}
+      />
+
+      {/* Menu — sibling of overlay, not a child, to avoid containing-block bugs on mobile */}
       <div
         ref={menuRef}
         style={{
           position: 'fixed',
           left: pos.left,
           top: pos.top,
+          zIndex: 51,
           opacity: pos.visible ? 1 : 0,
           transform: pos.visible ? 'scale(1)' : 'scale(0.88)',
           transformOrigin: pos.origin,
@@ -97,6 +119,7 @@ export function ContextMenu({
         }}
         className="min-w-[160px] max-w-[240px] overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl"
         onClick={(e) => e.stopPropagation()}
+        onContextMenu={(e) => e.stopPropagation()}
       >
         {/* Quick reactions row */}
         {quickReactions && quickReactions.length > 0 && (
@@ -161,6 +184,6 @@ export function ContextMenu({
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }
