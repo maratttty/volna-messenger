@@ -55,6 +55,8 @@ export function MessageList({
   initialLastReadId,
   initialUnreadCount = 0,
 }: MessageListProps) {
+  // DIAG: confirm new code is running
+  console.log('[diag-v3] render msgs:', messages.length, 'fetchDone:', fetchDone, 'loading:', loading);
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const containerRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
