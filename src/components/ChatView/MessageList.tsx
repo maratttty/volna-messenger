@@ -116,10 +116,17 @@ export function MessageList({
     if (fetchDone && !freshScrollDone.current) {
       freshScrollDone.current = true;
 
+      const mode = dividerRef.current ? 'к непрочитанному' : 'вниз';
+      const hasMedia = el.querySelectorAll('img, video').length > 0;
+      const pendingImgs = Array.from(el.querySelectorAll<HTMLImageElement>('img')).filter((img) => !img.complete).length;
+
       if (dividerRef.current) {
         // Case A: unread messages — scroll to divider
         el.scrollTop = dividerRef.current.offsetTop;
         setIsNearBottom(false);
+        console.log('[diag] PHASE-2 mode:', mode, '| msgs:', messages.length, '| scrollTop:', el.scrollTop, '| scrollHeight:', el.scrollHeight, '| clientHeight:', el.clientHeight, '| media:', hasMedia, '| pending imgs:', pendingImgs);
+        setTimeout(() => console.log('[diag] +300ms scrollHeight:', containerRef.current?.scrollHeight), 300);
+        setTimeout(() => console.log('[diag] +1000ms scrollHeight:', containerRef.current?.scrollHeight), 1000);
         return;
       }
 
@@ -127,6 +134,10 @@ export function MessageList({
       el.scrollTop = el.scrollHeight;
       // Capture the browser-clamped bottom position (= scrollHeight − clientHeight).
       const bottomScrollTop = el.scrollTop;
+
+      console.log('[diag] PHASE-2 mode:', mode, '| msgs:', messages.length, '| scrollTop:', el.scrollTop, '| scrollHeight:', el.scrollHeight, '| clientHeight:', el.clientHeight, '| media:', hasMedia, '| pending imgs:', pendingImgs);
+      setTimeout(() => console.log('[diag] +300ms scrollHeight:', containerRef.current?.scrollHeight, '| scrollTop:', containerRef.current?.scrollTop), 300);
+      setTimeout(() => console.log('[diag] +1000ms scrollHeight:', containerRef.current?.scrollHeight, '| scrollTop:', containerRef.current?.scrollTop), 1000);
 
       // Images may not be loaded when useLayoutEffect fires, making scrollHeight
       // smaller than the final value. Re-scroll on each image load, but only if
@@ -152,12 +163,14 @@ export function MessageList({
     // Skipped once fetchDone is true — Phase 2 handles everything from that point.
     if (!staleScrollDone.current && !fetchDone) {
       staleScrollDone.current = true;
+      const mode = dividerRef.current ? 'к непрочитанному' : 'вниз';
       if (dividerRef.current) {
         el.scrollTop = dividerRef.current.offsetTop;
         setIsNearBottom(false);
       } else {
         el.scrollTop = el.scrollHeight;
       }
+      console.log('[diag] PHASE-1 (stale) mode:', mode, '| msgs:', messages.length, '| scrollTop:', el.scrollTop, '| scrollHeight:', el.scrollHeight, '| clientHeight:', el.clientHeight);
     }
   }, [messages, firstUnreadId, fetchDone]);
 
