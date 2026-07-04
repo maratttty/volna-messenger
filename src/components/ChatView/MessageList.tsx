@@ -117,29 +117,34 @@ export function MessageList({
     if (!el || didInitialScroll.current === el || messages.length === 0) return;
     didInitialScroll.current = el;
 
-    // DIAGNOSTIC — remove after scroll bug is identified
-    const dividerFound = !!dividerRef.current;
-    const dividerOffsetTop = dividerRef.current?.offsetTop ?? null;
-    console.log('[scroll-diag] messages.length:', messages.length);
-    console.log('[scroll-diag] initialLastReadId:', initialLastReadId ?? 'null');
-    console.log('[scroll-diag] divider found:', dividerFound, '| offsetTop:', dividerOffsetTop);
-
     if (dividerRef.current) {
-      // Scroll so the "Непрочитанные сообщения" divider appears at the top.
+      // Case A: scroll so the "Непрочитанные сообщения" divider appears at the top.
       el.scrollTop = dividerRef.current.offsetTop;
       setIsNearBottom(false);
-      console.log('[scroll-diag] scrollTop set to:', el.scrollTop, '| scrollHeight:', el.scrollHeight);
-      setTimeout(() => {
-        console.log('[scroll-diag] scrollHeight after 500ms:', containerRef.current?.scrollHeight ?? 'unmounted');
-      }, 500);
       return;
     }
-    // Nothing unread → jump to the very bottom.
+
+    // Case B: no unread → jump to the very bottom.
     el.scrollTop = el.scrollHeight;
-    console.log('[scroll-diag] scrollTop set to:', el.scrollTop, '| scrollHeight:', el.scrollHeight);
-    setTimeout(() => {
-      console.log('[scroll-diag] scrollHeight after 500ms:', containerRef.current?.scrollHeight ?? 'unmounted');
-    }, 500);
+
+    // useLayoutEffect fires before images are loaded, so el.scrollHeight may be
+    // smaller than the final rendered height. Re-scroll after each image loads,
+    // but only if the user hasn't manually scrolled away (dist from bottom < 150px).
+    const scrollToBottomIfNear = () => {
+      const c = containerRef.current;
+      if (!c) return;
+      if (c.scrollHeight - c.scrollTop - c.clientHeight < 150) c.scrollTop = c.scrollHeight;
+    };
+
+    const imgs = Array.from(el.querySelectorAll<HTMLImageElement>('img')).filter((img) => !img.complete);
+    imgs.forEach((img) => img.addEventListener('load', scrollToBottomIfNear, { once: true }));
+    // Fallback for video thumbnails and other late-expanding content.
+    const timer = setTimeout(scrollToBottomIfNear, 1000);
+
+    return () => {
+      imgs.forEach((img) => img.removeEventListener('load', scrollToBottomIfNear));
+      clearTimeout(timer);
+    };
   }, [messages, firstUnreadId]);
 
   // Auto-scroll to bottom when new messages arrive while the user is near bottom.
