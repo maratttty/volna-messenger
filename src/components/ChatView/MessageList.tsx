@@ -63,7 +63,10 @@ export function MessageList({
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const prevScrollHeight = useRef(0);
   const prevMessageCountRef = useRef(0);
-  const didInitialScroll = useRef(false);
+  // Stores the container DOM element we already scrolled, not a boolean.
+  // When the spinner unmounts/remounts the container (new DOM element), the
+  // reference differs → we scroll again. A boolean ref would stay "true" across remounts.
+  const didInitialScroll = useRef<HTMLDivElement | null>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [flashId, setFlashId] = useState<string | null>(null);
   // Initialised with the unread count at open time so the ↓ badge is shown
@@ -71,37 +74,37 @@ export function MessageList({
   // Resets to 0 when the user reaches the bottom.
   const [newWhileAway, setNewWhileAway] = useState(initialUnreadCount);
 
-  // The first INCOMING (not own) message after the read cursor.
-  // Own messages are never "unread" for the sender, so they are skipped.
-  const firstUnreadId = useMemo<string | null>(() => {
-    if (messages.length === 0) return null;
+  // Computed ONCE from the first loaded page, then frozen.
+  // Must not recompute on realtime updates — a new incoming message should
+  // never move the divider while the user is already inside the chat.
+  const firstUnreadIdRef = useRef<string | null>(null);
+  const firstUnreadIdComputed = useRef(false);
 
-    // Determine where to start searching for unread incoming messages.
+  if (!firstUnreadIdComputed.current && messages.length > 0) {
+    firstUnreadIdComputed.current = true;
     let startIdx = 0;
     if (initialLastReadId) {
       const idx = messages.findIndex((m) => m.id === initialLastReadId);
-      if (idx !== -1) {
-        startIdx = idx + 1;
-        if (startIdx >= messages.length) return null; // everything is read
-      }
-      // idx === -1: cursor is older than this page — search from index 0
+      if (idx !== -1) startIdx = idx + 1;
+      // idx === -1: cursor predates this page — search from 0
     }
-
     for (let i = startIdx; i < messages.length; i++) {
       if (messages[i].sender_id !== currentUserId) {
-        return messages[i].id;
+        firstUnreadIdRef.current = messages[i].id;
+        break;
       }
     }
-    return null;
-  }, [messages, initialLastReadId, currentUserId]);
+  }
+
+  const firstUnreadId = firstUnreadIdRef.current;
 
   // One-time initial scroll. Runs BEFORE paint (useLayoutEffect) so the user
   // never sees the wrong position. Uses dividerRef.offsetTop which is
   // layout-relative (not viewport-relative) — safe even during slide animations.
   useLayoutEffect(() => {
     const el = containerRef.current;
-    if (!el || didInitialScroll.current || messages.length === 0) return;
-    didInitialScroll.current = true;
+    if (!el || didInitialScroll.current === el || messages.length === 0) return;
+    didInitialScroll.current = el;
 
     if (dividerRef.current) {
       // Scroll so the "Непрочитанные сообщения" divider appears at the top.
