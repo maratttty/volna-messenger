@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Paperclip, Reply, Pencil, Trash2, Forward, Pin, PinOff, Copy } from 'lucide-react';
+import { Paperclip, Reply, Pencil, Trash2, Forward, Pin, PinOff, Copy, Check, CheckCheck } from 'lucide-react';
 import type { Message, MessageStatusValue, ReactionSummary } from '../../types/database';
 import { formatMessageTime } from '../../lib/time';
 import { AudioPlayer } from './AudioPlayer';
@@ -29,9 +29,9 @@ interface MessageBubbleProps {
 }
 
 function StatusTicks({ status }: { status?: MessageStatusValue }) {
-  if (!status) return <span className="ml-1 text-[10px] opacity-60">✓</span>; // sent, not yet delivered
-  if (status === 'delivered') return <span className="ml-1 text-[10px] opacity-60">✓✓</span>;
-  return <span className="ml-1 text-[10px] text-accent">✓✓</span>; // read
+  if (status === 'read') return <CheckCheck size={13} className="shrink-0 text-accent" />;
+  if (status === 'delivered') return <CheckCheck size={13} className="shrink-0 opacity-50" />;
+  return <Check size={13} className="shrink-0 opacity-50" />;
 }
 
 function formatBytes(size?: number): string {
@@ -148,7 +148,7 @@ export function MessageBubble({
         isPinned
           ? { label: 'Открепить', icon: PinOff, onClick: onTogglePin }
           : { label: 'Закрепить', icon: Pin,    onClick: onTogglePin },
-        ...(isOwn ? [{ label: 'Удалить', icon: Trash2, onClick: () => onDelete(message), danger: true }] : []),
+        { label: 'Удалить', icon: Trash2, onClick: () => onDelete(message), danger: true as const },
       ]
     : [];
 

@@ -24,10 +24,10 @@ export async function fetchChats(userId: string): Promise<ChatWithMeta[]> {
       // All chat rows
       supabase.from('chats').select('*').in('id', chatIds),
 
-      // Other-user IDs for all direct chats in one query
+      // Other-user memberships — also grab their read cursor for the ✓✓ indicator
       supabase
         .from('chat_members')
-        .select('chat_id, user_id')
+        .select('chat_id, user_id, last_read_message_id')
         .in('chat_id', chatIds)
         .neq('user_id', userId),
 
@@ -46,21 +46,35 @@ export async function fetchChats(userId: string): Promise<ChatWithMeta[]> {
 
   // Build lookup maps from the batch results
   const otherUserIdByChatId = new Map<string, string>();
+  const otherLastReadIdByChatId = new Map<string, string | null>();
   for (const m of allOtherMembers ?? []) {
-    if (!otherUserIdByChatId.has(m.chat_id)) otherUserIdByChatId.set(m.chat_id, m.user_id);
+    if (!otherUserIdByChatId.has(m.chat_id)) {
+      otherUserIdByChatId.set(m.chat_id, m.user_id);
+      otherLastReadIdByChatId.set(m.chat_id, m.last_read_message_id ?? null);
+    }
   }
 
   const lastReadAtById = new Map<string, string>();
   for (const m of lastReadMsgs ?? []) lastReadAtById.set(m.id, m.created_at);
 
-  // ── Round 3: batch-fetch all other-user profiles in one query ─────
+  // ── Round 3: profiles + timestamps for others' read cursors ───────
   const otherUserIds = [...new Set(otherUserIdByChatId.values())];
-  const { data: profiles } = otherUserIds.length
-    ? await supabase.from('profiles').select('*').in('id', otherUserIds)
-    : { data: [] };
+  const otherReadIds = [...new Set(otherLastReadIdByChatId.values())].filter(Boolean) as string[];
+
+  const [{ data: profiles }, { data: otherReadMsgs }] = await Promise.all([
+    otherUserIds.length
+      ? supabase.from('profiles').select('*').in('id', otherUserIds)
+      : Promise.resolve({ data: [] as Profile[] }),
+    otherReadIds.length
+      ? supabase.from('messages').select('id, created_at').in('id', otherReadIds)
+      : Promise.resolve({ data: [] as { id: string; created_at: string }[] }),
+  ]);
 
   const profileById = new Map<string, Profile>();
   for (const p of profiles ?? []) profileById.set(p.id, p as Profile);
+
+  const otherReadAtById = new Map<string, string>();
+  for (const m of otherReadMsgs ?? []) otherReadAtById.set(m.id, m.created_at);
 
   // ── Round 4: per-chat last message + unread count in parallel ─────
   type Membership = { chat_id: string; role: MemberRole; last_read_message_id: string | null; muted: boolean; pinned_at: string | null };
@@ -107,15 +121,26 @@ export async function fetchChats(userId: string): Promise<ChatWithMeta[]> {
       const otherId  = otherUserIdByChatId.get(chatId);
       const otherUser = otherId ? profileById.get(otherId) : undefined;
 
+      const lastMsg = lastMsgs?.[0];
+      const otherLastReadId = chat.type === 'direct' ? (otherLastReadIdByChatId.get(chatId) ?? null) : null;
+      const otherLastReadAt = otherLastReadId ? otherReadAtById.get(otherLastReadId) : undefined;
+      const lastMessageReadByOther = !!(
+        lastMsg &&
+        lastMsg.sender_id === userId &&
+        otherLastReadAt &&
+        lastMsg.created_at <= otherLastReadAt
+      );
+
       return {
         ...chat,
         otherUser,
-        lastMessage:           lastMsgs?.[0] ?? undefined,
-        unreadCount:           unreadResult.count ?? 0,
-        myRole:                (membership?.role as MemberRole) ?? 'member',
-        muted:                 (membership?.muted as boolean) ?? false,
-        pinned_at:             (membership?.pinned_at as string | null) ?? null,
-        last_read_message_id:  lastReadId,
+        lastMessage:              lastMsg ?? undefined,
+        unreadCount:              unreadResult.count ?? 0,
+        myRole:                   (membership?.role as MemberRole) ?? 'member',
+        muted:                    (membership?.muted as boolean) ?? false,
+        pinned_at:                (membership?.pinned_at as string | null) ?? null,
+        last_read_message_id:     lastReadId,
+        lastMessageReadByOther,
       } as ChatWithMeta;
     }),
   );

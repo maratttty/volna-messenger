@@ -444,7 +444,10 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
 
       {deleteTarget && (
         <ConfirmDeleteModal
-          isOwn={deleteTarget.sender_id === currentUserId}
+          canDeleteForEveryone={
+            deleteTarget.sender_id === currentUserId ||
+            (chat.type === 'group' && (chat.myRole === 'owner' || chat.myRole === 'admin'))
+          }
           onDeleteForMe={() => void handleDeleteForMe()}
           onDeleteForEveryone={() => void handleDeleteForEveryone()}
           onClose={() => setDeleteTarget(null)}

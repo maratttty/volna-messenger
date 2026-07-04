@@ -74,6 +74,8 @@ export function useChats() {
               ...existingChat,
               lastMessage: newMessage,
               unreadCount: isOwn || isReading ? existingChat.unreadCount : existingChat.unreadCount + 1,
+              // New own message → other person hasn't read it yet
+              lastMessageReadByOther: isOwn ? false : existingChat.lastMessageReadByOther,
             });
             if (!isOwn) {
               void markMessageDelivered(newMessage.id, userId);

@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { BellOff, Bell, Pin, PinOff, CheckCheck, BookOpen, Trash2, X } from 'lucide-react';
+import { BellOff, Bell, Pin, PinOff, Check, CheckCheck, BookOpen, Trash2, X } from 'lucide-react';
 import type { ChatWithMeta } from '../../types/database';
 import { Avatar } from '../ui/Avatar';
 import { formatRelativeTime } from '../../lib/time';
@@ -132,7 +132,14 @@ export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListI
               <span className="truncate">{title}</span>
               {chat.muted && <BellOff size={12} className="shrink-0 text-text-muted" />}
             </p>
-            <span className="shrink-0 text-xs text-text-muted">{formatRelativeTime(time)}</span>
+            <span className="flex shrink-0 items-center gap-0.5 text-xs text-text-muted">
+              {chat.lastMessage?.sender_id === currentUserId && (
+                chat.lastMessageReadByOther
+                  ? <CheckCheck size={13} className="text-accent" />
+                  : <Check size={13} className="opacity-60" />
+              )}
+              {formatRelativeTime(time)}
+            </span>
           </div>
           <div className="flex items-baseline justify-between gap-2">
             <p className="truncate text-xs text-text-muted">{previewText(chat)}</p>

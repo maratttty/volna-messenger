@@ -122,6 +122,7 @@ export interface ChatWithMeta extends Chat {
   muted: boolean;
   pinned_at: string | null;           // from chat_members; null = not pinned
   last_read_message_id: string | null; // read cursor for this user
+  lastMessageReadByOther?: boolean;    // true when the other participant has read my last message
 }
 
 export interface Database {
