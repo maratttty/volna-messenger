@@ -132,6 +132,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
     hasMore,
     loading,
     loadingMore,
+    fetchDone,
     loadMore,
     ensureMessageLoaded,
     send,
@@ -420,6 +421,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
           pinnedMessageId={chat.pinned_message_id}
           onTogglePin={(message) => void handleTogglePin(message)}
           highlightMessageId={highlightMessageId}
+          fetchDone={fetchDone}
           initialLastReadId={initialLastReadId.current}
           initialUnreadCount={initialUnreadCount.current}
         />

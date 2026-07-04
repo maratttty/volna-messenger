@@ -25,6 +25,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     useMessageStore();
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [fetchDone, setFetchDone] = useState(false);
   const [statuses, setStatuses] = useState<Map<string, MessageStatusValue>>(new Map());
   const [reactions, setReactions] = useState<Map<string, ReactionSummary[]>>(new Map());
   const chatMessages = chatId ? messages[chatId] ?? [] : [];
@@ -64,11 +65,13 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     if (!chatId || !currentUserId) return;
     let cancelled = false;
 
+    setFetchDone(false);
     setLoading(true);
     fetchMessages(chatId, currentUserId)
       .then(({ messages: page, hasMore: more }) => {
         if (cancelled) return;
         setMessages(chatId, page, more);
+        setFetchDone(true);
         // Persist the read cursor immediately (one fast row update) so that the
         // correct position survives a page refresh even if markChatRead is slow.
         const lastMsg = page[page.length - 1];
@@ -414,6 +417,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     hasMore: chatHasMore,
     loading,
     loadingMore,
+    fetchDone,
     loadMore,
     ensureMessageLoaded,
     send,

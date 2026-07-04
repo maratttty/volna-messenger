@@ -12,6 +12,7 @@ interface MessageListProps {
   hasMore: boolean;
   loadingMore: boolean;
   loading: boolean;
+  fetchDone: boolean;
   onLoadMore: () => void;
   senderNames?: Map<string, string>;
   resolveSenderName: (senderId: string | null) => string;
@@ -38,6 +39,7 @@ export function MessageList({
   hasMore,
   loadingMore,
   loading,
+  fetchDone,
   onLoadMore,
   senderNames,
   resolveSenderName,
@@ -63,10 +65,13 @@ export function MessageList({
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const prevScrollHeight = useRef(0);
   const prevMessageCountRef = useRef(0);
-  // Stores the container DOM element we already scrolled, not a boolean.
-  // When the spinner unmounts/remounts the container (new DOM element), the
-  // reference differs → we scroll again. A boolean ref would stay "true" across remounts.
-  const didInitialScroll = useRef<HTMLDivElement | null>(null);
+  // Two-phase initial scroll:
+  // - staleScrollDone: quick scroll using whatever Zustand has cached at mount time
+  // - freshScrollDone: definitive scroll once the real server fetch completes
+  // Splitting them ensures the correct position is applied even when React 18
+  // batches loading=true/false into a single render (no spinner, same DOM element).
+  const staleScrollDone = useRef(false);
+  const freshScrollDone = useRef(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [flashId, setFlashId] = useState<string | null>(null);
   // Initialised with the unread count at open time so the ↓ badge is shown
@@ -74,24 +79,12 @@ export function MessageList({
   // Resets to 0 when the user reaches the bottom.
   const [newWhileAway, setNewWhileAway] = useState(initialUnreadCount);
 
-  // Track when the FIRST real server fetch completes (loading: true → false).
-  // The Zustand store may hold stale cached messages from a previous session —
-  // computing firstUnreadId from that cache gives the wrong position because
-  // the cursor predates any messages that arrived since then.
-  // We defer the computation until the fresh server data is ready.
-  const prevLoadingRef = useRef(loading);
-  const initialFetchDoneRef = useRef(false);
-  if (prevLoadingRef.current === true && loading === false) {
-    initialFetchDoneRef.current = true;
-  }
-  prevLoadingRef.current = loading;
-
-  // Computed ONCE from the first real (post-fetch) page, then frozen so that
-  // realtime messages arriving while the chat is open never move the divider.
+  // Computed ONCE after the initial server fetch (fetchDone = true), then frozen
+  // so that realtime messages arriving while the chat is open never move the divider.
   const firstUnreadIdRef = useRef<string | null>(null);
   const firstUnreadIdComputed = useRef(false);
 
-  if (!firstUnreadIdComputed.current && initialFetchDoneRef.current && messages.length > 0) {
+  if (!firstUnreadIdComputed.current && fetchDone && messages.length > 0) {
     firstUnreadIdComputed.current = true;
     let startIdx = 0;
     if (initialLastReadId) {
@@ -114,38 +107,59 @@ export function MessageList({
   // layout-relative (not viewport-relative) — safe even during slide animations.
   useLayoutEffect(() => {
     const el = containerRef.current;
-    if (!el || didInitialScroll.current === el || messages.length === 0) return;
-    didInitialScroll.current = el;
+    if (!el || messages.length === 0) return;
 
-    if (dividerRef.current) {
-      // Case A: scroll so the "Непрочитанные сообщения" divider appears at the top.
-      el.scrollTop = dividerRef.current.offsetTop;
-      setIsNearBottom(false);
-      return;
+    // ── Phase 2: definitive scroll after the real server fetch ────────────────
+    // Runs once when fetchDone first becomes true. Always fires regardless of
+    // whether the container remounted (handles React 18 batching that can skip
+    // the spinner render, keeping the same DOM element throughout).
+    if (fetchDone && !freshScrollDone.current) {
+      freshScrollDone.current = true;
+
+      if (dividerRef.current) {
+        // Case A: unread messages — scroll to divider
+        el.scrollTop = dividerRef.current.offsetTop;
+        setIsNearBottom(false);
+        return;
+      }
+
+      // Case B: no unread — scroll to the very bottom.
+      el.scrollTop = el.scrollHeight;
+      // Capture the browser-clamped bottom position (= scrollHeight − clientHeight).
+      const bottomScrollTop = el.scrollTop;
+
+      // Images may not be loaded when useLayoutEffect fires, making scrollHeight
+      // smaller than the final value. Re-scroll on each image load, but only if
+      // the user hasn't scrolled up manually (scrollTop hasn't decreased).
+      const rescrollIfNotScrolledUp = () => {
+        const c = containerRef.current;
+        if (!c || c.scrollTop < bottomScrollTop - 10) return;
+        c.scrollTop = c.scrollHeight;
+      };
+
+      const imgs = Array.from(el.querySelectorAll<HTMLImageElement>('img')).filter((img) => !img.complete);
+      imgs.forEach((img) => img.addEventListener('load', rescrollIfNotScrolledUp, { once: true }));
+      const timer = setTimeout(rescrollIfNotScrolledUp, 1000);
+
+      return () => {
+        imgs.forEach((img) => img.removeEventListener('load', rescrollIfNotScrolledUp));
+        clearTimeout(timer);
+      };
     }
 
-    // Case B: no unread → jump to the very bottom.
-    el.scrollTop = el.scrollHeight;
-
-    // useLayoutEffect fires before images are loaded, so el.scrollHeight may be
-    // smaller than the final rendered height. Re-scroll after each image loads,
-    // but only if the user hasn't manually scrolled away (dist from bottom < 150px).
-    const scrollToBottomIfNear = () => {
-      const c = containerRef.current;
-      if (!c) return;
-      if (c.scrollHeight - c.scrollTop - c.clientHeight < 150) c.scrollTop = c.scrollHeight;
-    };
-
-    const imgs = Array.from(el.querySelectorAll<HTMLImageElement>('img')).filter((img) => !img.complete);
-    imgs.forEach((img) => img.addEventListener('load', scrollToBottomIfNear, { once: true }));
-    // Fallback for video thumbnails and other late-expanding content.
-    const timer = setTimeout(scrollToBottomIfNear, 1000);
-
-    return () => {
-      imgs.forEach((img) => img.removeEventListener('load', scrollToBottomIfNear));
-      clearTimeout(timer);
-    };
-  }, [messages, firstUnreadId]);
+    // ── Phase 1: quick scroll using stale Zustand cache ───────────────────────
+    // Provides an immediate visual position before the fetch completes.
+    // Skipped once fetchDone is true — Phase 2 handles everything from that point.
+    if (!staleScrollDone.current && !fetchDone) {
+      staleScrollDone.current = true;
+      if (dividerRef.current) {
+        el.scrollTop = dividerRef.current.offsetTop;
+        setIsNearBottom(false);
+      } else {
+        el.scrollTop = el.scrollHeight;
+      }
+    }
+  }, [messages, firstUnreadId, fetchDone]);
 
   // Auto-scroll to bottom when new messages arrive while the user is near bottom.
   useEffect(() => {
