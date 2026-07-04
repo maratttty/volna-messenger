@@ -19,27 +19,27 @@ export default defineConfig({
         background_color: '#f5f8fa',
         display: 'standalone',
         orientation: 'portrait',
-        scope: '/',
-        start_url: '/',
+        scope: '/volna-messenger/',
+        start_url: '/volna-messenger/',
         icons: [
           {
-            src: '/pwa-192x192.png',
+            src: '/volna-messenger/pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: '/pwa-512x512.png',
+            src: '/volna-messenger/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
           },
           {
-            src: '/pwa-maskable-192x192.png',
+            src: '/volna-messenger/pwa-maskable-192x192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'maskable',
           },
           {
-            src: '/pwa-maskable-512x512.png',
+            src: '/volna-messenger/pwa-maskable-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
@@ -52,7 +52,7 @@ export default defineConfig({
         // Cache app shell and static assets
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // Don't cache Supabase API calls — always fetch fresh
-        navigateFallback: '/index.html',
+        navigateFallback: '/volna-messenger/index.html',
         navigateFallbackDenylist: [/^\/rest\//, /^\/auth\//, /^\/storage\//],
         runtimeCaching: [
           {
