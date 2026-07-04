@@ -74,19 +74,30 @@ export function MessageList({
   // Resets to 0 when the user reaches the bottom.
   const [newWhileAway, setNewWhileAway] = useState(initialUnreadCount);
 
-  // Computed ONCE from the first loaded page, then frozen.
-  // Must not recompute on realtime updates — a new incoming message should
-  // never move the divider while the user is already inside the chat.
+  // Track when the FIRST real server fetch completes (loading: true → false).
+  // The Zustand store may hold stale cached messages from a previous session —
+  // computing firstUnreadId from that cache gives the wrong position because
+  // the cursor predates any messages that arrived since then.
+  // We defer the computation until the fresh server data is ready.
+  const prevLoadingRef = useRef(loading);
+  const initialFetchDoneRef = useRef(false);
+  if (prevLoadingRef.current === true && loading === false) {
+    initialFetchDoneRef.current = true;
+  }
+  prevLoadingRef.current = loading;
+
+  // Computed ONCE from the first real (post-fetch) page, then frozen so that
+  // realtime messages arriving while the chat is open never move the divider.
   const firstUnreadIdRef = useRef<string | null>(null);
   const firstUnreadIdComputed = useRef(false);
 
-  if (!firstUnreadIdComputed.current && messages.length > 0) {
+  if (!firstUnreadIdComputed.current && initialFetchDoneRef.current && messages.length > 0) {
     firstUnreadIdComputed.current = true;
     let startIdx = 0;
     if (initialLastReadId) {
       const idx = messages.findIndex((m) => m.id === initialLastReadId);
       if (idx !== -1) startIdx = idx + 1;
-      // idx === -1: cursor predates this page — search from 0
+      // idx === -1: cursor predates this page — search from index 0
     }
     for (let i = startIdx; i < messages.length; i++) {
       if (messages[i].sender_id !== currentUserId) {

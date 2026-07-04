@@ -257,24 +257,10 @@ export async function markChatRead(chatId: string, userId: string): Promise<void
   }));
 
   await supabase.from('message_status').upsert(statusRows, { onConflict: 'message_id,user_id' });
-
-  // Get the actual latest message in the chat (including own) for the cursor
-  const { data: latestMsg } = await supabase
-    .from('messages')
-    .select('id')
-    .eq('chat_id', chatId)
-    .eq('deleted', false)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (latestMsg) {
-    await supabase
-      .from('chat_members')
-      .update({ last_read_message_id: latestMsg.id })
-      .eq('chat_id', chatId)
-      .eq('user_id', userId);
-  }
+  // Cursor (last_read_message_id) is managed exclusively by updateReadCursor().
+  // Updating it here created a race: this function runs 3 sequential DB calls
+  // while updateReadCursor() may advance the cursor between them, and our
+  // stale query result would then overwrite the newer value.
 }
 
 // Advances the per-member read cursor in chat_members so fetchChats reports
