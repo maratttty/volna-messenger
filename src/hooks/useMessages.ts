@@ -23,13 +23,13 @@ import type { Message, MessageStatusValue, MessageType, ReactionSummary } from '
 export function useMessages(chatId: string | null, currentUserId: string | undefined) {
   const { messages, hasMore, setMessages, prependMessages, appendMessage, updateMessage, removeMessage } =
     useMessageStore();
+  const chatMessages = chatId ? messages[chatId] ?? [] : [];
+  const chatHasMore = chatId ? hasMore[chatId] ?? false : false;
   const [loading, setLoading] = useState(() => chatMessages.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [fetchDone, setFetchDone] = useState(false);
   const [statuses, setStatuses] = useState<Map<string, MessageStatusValue>>(new Map());
   const [reactions, setReactions] = useState<Map<string, ReactionSummary[]>>(new Map());
-  const chatMessages = chatId ? messages[chatId] ?? [] : [];
-  const chatHasMore = chatId ? hasMore[chatId] ?? false : false;
 
   const refreshStatuses = useCallback(async (msgs: Message[]) => {
     if (!currentUserId) return;
