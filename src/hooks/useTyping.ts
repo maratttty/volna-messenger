@@ -2,34 +2,53 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
-const TYPING_TTL_MS = 4000;
+export type ActivityType = 'typing' | 'recording_voice' | 'recording_video';
+type ActivityPayload = ActivityType | 'stop';
 
-// Ephemeral "is typing" signal via Realtime Broadcast — no DB writes, no
-// persistence; just a low-latency fan-out to everyone else in the chat.
+const ACTIVITY_TTL_MS = 5000;
+const ACTIVITY_REPEAT_MS = 3000;
+
+export interface ActivityInfo {
+  displayName: string;
+  activity: ActivityType;
+}
+
 export function useTyping(chatId: string | null, userId: string | undefined, displayName: string | undefined) {
-  const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map()); // userId -> displayName
+  const [activityUsers, setActivityUsers] = useState<Map<string, ActivityInfo>>(new Map());
   const channelRef = useRef<RealtimeChannel | null>(null);
   const clearTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const activityIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    setTypingUsers(new Map());
+    setActivityUsers(new Map());
     if (!chatId || !userId) return;
 
-    // NOTE: unlike the postgres_changes channels in useMessages/useChats,
-    // this topic name must stay identical across clients — broadcast only
-    // relays between subscribers sharing the exact same topic.
     const channel = supabase.channel(`typing:${chatId}`, { config: { broadcast: { self: false } } });
     channel
-      .on('broadcast', { event: 'typing' }, (payload) => {
-        const { userId: fromId, displayName: fromName } = payload.payload as {
+      .on('broadcast', { event: 'activity' }, (payload) => {
+        const { userId: fromId, displayName: fromName, activity } = payload.payload as {
           userId: string;
           displayName: string;
+          activity: ActivityPayload;
         };
         if (fromId === userId) return;
 
-        setTypingUsers((prev) => {
+        if (activity === 'stop') {
+          const t = clearTimers.current.get(fromId);
+          if (t) clearTimeout(t);
+          clearTimers.current.delete(fromId);
+          setActivityUsers((prev) => {
+            if (!prev.has(fromId)) return prev;
+            const next = new Map(prev);
+            next.delete(fromId);
+            return next;
+          });
+          return;
+        }
+
+        setActivityUsers((prev) => {
           const next = new Map(prev);
-          next.set(fromId, fromName);
+          next.set(fromId, { displayName: fromName, activity });
           return next;
         });
 
@@ -38,12 +57,12 @@ export function useTyping(chatId: string | null, userId: string | undefined, dis
         clearTimers.current.set(
           fromId,
           setTimeout(() => {
-            setTypingUsers((prev) => {
+            setActivityUsers((prev) => {
               const next = new Map(prev);
               next.delete(fromId);
               return next;
             });
-          }, TYPING_TTL_MS),
+          }, ACTIVITY_TTL_MS),
         );
       })
       .subscribe();
@@ -53,19 +72,48 @@ export function useTyping(chatId: string | null, userId: string | undefined, dis
     return () => {
       for (const t of clearTimers.current.values()) clearTimeout(t);
       clearTimers.current.clear();
+      if (activityIntervalRef.current) {
+        clearInterval(activityIntervalRef.current);
+        activityIntervalRef.current = null;
+      }
       void supabase.removeChannel(channel);
       channelRef.current = null;
     };
   }, [chatId, userId]);
 
-  const notifyTyping = useCallback(() => {
+  const sendActivity = useCallback((activity: ActivityPayload) => {
     if (!channelRef.current || !userId || !displayName) return;
     void channelRef.current.send({
       type: 'broadcast',
-      event: 'typing',
-      payload: { userId, displayName },
+      event: 'activity',
+      payload: { userId, displayName, activity },
     });
   }, [userId, displayName]);
 
-  return { typingUsers, notifyTyping };
+  // One-shot typing signal (called on each keystroke, throttled by caller)
+  const notifyTyping = useCallback(() => {
+    if (activityIntervalRef.current) {
+      clearInterval(activityIntervalRef.current);
+      activityIntervalRef.current = null;
+    }
+    sendActivity('typing');
+  }, [sendActivity]);
+
+  // Starts broadcasting a recording activity (repeats every ACTIVITY_REPEAT_MS)
+  const notifyActivity = useCallback((type: ActivityType) => {
+    if (activityIntervalRef.current) clearInterval(activityIntervalRef.current);
+    sendActivity(type);
+    activityIntervalRef.current = setInterval(() => sendActivity(type), ACTIVITY_REPEAT_MS);
+  }, [sendActivity]);
+
+  // Immediately clears any activity broadcast on other side
+  const notifyActivityStop = useCallback(() => {
+    if (activityIntervalRef.current) {
+      clearInterval(activityIntervalRef.current);
+      activityIntervalRef.current = null;
+    }
+    sendActivity('stop');
+  }, [sendActivity]);
+
+  return { activityUsers, notifyTyping, notifyActivity, notifyActivityStop };
 }

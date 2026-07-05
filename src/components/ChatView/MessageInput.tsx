@@ -17,6 +17,8 @@ interface MessageInputProps {
   onSendVideoNote: (blob: Blob, durationSeconds: number, mimeType: string) => Promise<void>;
   onSendGif: (gifUrl: string, title: string) => Promise<void>;
   onTyping: () => void;
+  onStartRecording: (type: 'recording_voice' | 'recording_video') => void;
+  onStopRecording: () => void;
   replyTarget: Message | null;
   onCancelReply: () => void;
   editingMessage: Message | null;
@@ -32,6 +34,8 @@ export function MessageInput({
   onSendVideoNote,
   onSendGif,
   onTyping,
+  onStartRecording,
+  onStopRecording,
   replyTarget,
   onCancelReply,
   editingMessage,
@@ -146,6 +150,7 @@ export function MessageInput({
     setError(null);
     setCancelProgress(0);
     await active.start();
+    onStartRecording(mode === 'voice' ? 'recording_voice' : 'recording_video');
   }
 
   function handleHoldMove(deltaX: number) {
@@ -188,6 +193,7 @@ export function MessageInput({
 
   async function handleHoldEnd(canceled: boolean) {
     setCancelProgress(0);
+    onStopRecording();
     if (canceled) {
       active.cancel();
       return;
@@ -201,11 +207,13 @@ export function MessageInput({
   }
 
   async function handleSendLocked() {
+    onStopRecording();
     await finishRecording();
     setLocked(false);
   }
 
   function handleCancelLocked() {
+    onStopRecording();
     active.cancel();
     setLocked(false);
   }

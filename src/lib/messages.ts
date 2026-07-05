@@ -296,6 +296,38 @@ export async function markMessageDelivered(messageId: string, userId: string): P
     );
 }
 
+// ── Pinned messages (multi-pin per chat) ─────────────────────────────────────
+
+export async function pinMessageMulti(chatId: string, messageId: string): Promise<void> {
+  const { error } = await supabase.rpc('pin_message_multi', { p_chat_id: chatId, p_message_id: messageId });
+  if (error) throw error;
+}
+
+export async function unpinMessageMulti(chatId: string, messageId: string): Promise<void> {
+  const { error } = await supabase.rpc('unpin_message_multi', { p_chat_id: chatId, p_message_id: messageId });
+  if (error) throw error;
+}
+
+export async function fetchPinnedMessages(chatId: string): Promise<Message[]> {
+  const { data: pins, error: pinError } = await supabase
+    .from('pinned_messages')
+    .select('message_id, pinned_at')
+    .eq('chat_id', chatId)
+    .order('pinned_at', { ascending: true });
+  if (pinError) throw pinError;
+  if (!pins || pins.length === 0) return [];
+
+  const messageIds = (pins as { message_id: string; pinned_at: string }[]).map((p) => p.message_id);
+  const { data: msgs, error: msgError } = await supabase
+    .from('messages')
+    .select('*')
+    .in('id', messageIds);
+  if (msgError) throw msgError;
+
+  const order = new Map(messageIds.map((id, i) => [id, i]));
+  return ((msgs ?? []) as Message[]).sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+}
+
 // Status map for messages sent by the current user (id -> best status across recipients)
 export async function fetchOwnMessageStatuses(
   messageIds: string[],

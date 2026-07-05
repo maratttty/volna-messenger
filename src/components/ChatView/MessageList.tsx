@@ -22,7 +22,7 @@ interface MessageListProps {
   onForward: (message: Message) => void;
   onJumpToMessage: (messageId: string) => void;
   onToggleReaction: (messageId: string, emoji: string) => void;
-  pinnedMessageId: string | null;
+  pinnedMessageIds: Set<string>;
   onTogglePin: (message: Message) => void;
   highlightMessageId?: string | null;
   // Captured at chat-open time before markChatRead resets the cursor
@@ -49,7 +49,7 @@ export function MessageList({
   onForward,
   onJumpToMessage,
   onToggleReaction,
-  pinnedMessageId,
+  pinnedMessageIds,
   onTogglePin,
   highlightMessageId,
   initialLastReadId,
@@ -296,7 +296,7 @@ export function MessageList({
                   repliedMessage={repliedMessage}
                   repliedSenderName={repliedMessage ? resolveSenderName(repliedMessage.sender_id) : undefined}
                   reactions={reactions.get(msg.id)}
-                  isPinned={pinnedMessageId === msg.id}
+                  isPinned={pinnedMessageIds.has(msg.id)}
                   onReply={onReply}
                   onEdit={onEdit}
                   onDelete={onDelete}
