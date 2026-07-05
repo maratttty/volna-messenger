@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { BellOff, Bell, Pin, PinOff, Check, CheckCheck, BookOpen, Trash2, X, LogOut } from 'lucide-react';
 import type { ChatWithMeta } from '../../types/database';
 import { Avatar } from '../ui/Avatar';
@@ -36,16 +36,25 @@ interface ChatListItemProps {
   currentUserId: string;
   onClick: () => void;
   onContextMenuOpen: (anchorRect: DOMRect, items: ContextMenuItem[], close: () => void) => void;
+  onDeleteOpen: (config: DeleteConfig) => void;
 }
 
 // ── Delete confirmation modal ─────────────────────────────────────────────────
 
-type DeleteVariant =
+export type DeleteVariant =
   | { kind: 'direct'; title: string }
   | { kind: 'group_member'; title: string }
   | { kind: 'group_owner'; title: string };
 
-function DeleteConfirmModal({
+export interface DeleteConfig {
+  variant: DeleteVariant;
+  onDeleteForMe: () => void;
+  onDeleteForAll: () => void;
+  onLeave: () => void;
+  onDeleteGroup: () => void;
+}
+
+export function DeleteConfirmModal({
   variant,
   onClose,
   onDeleteForMe,
@@ -162,9 +171,8 @@ function DeleteConfirmModal({
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function ChatListItem({ chat, active, currentUserId, onClick, onContextMenuOpen }: ChatListItemProps) {
+export function ChatListItem({ chat, active, currentUserId, onClick, onContextMenuOpen, onDeleteOpen }: ChatListItemProps) {
   const menu = useContextMenu();
-  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const title     = chat.type === 'direct' ? chat.otherUser?.display_name ?? '...' : chat.title ?? 'Группа';
   const avatarSrc = chat.type === 'direct' ? chat.otherUser?.avatar_url : chat.avatar_url;
@@ -242,8 +250,8 @@ export function ChatListItem({ chat, active, currentUserId, onClick, onContextMe
       ? { label: 'Отметить прочитанным',   icon: CheckCheck, onClick: () => void handleMarkRead() }
       : { label: 'Отметить непрочитанным', icon: BookOpen,   onClick: () => void handleMarkUnread() },
     chat.type === 'group'
-      ? { label: chat.myRole === 'owner' ? 'Выйти / удалить группу' : 'Выйти из группы', icon: LogOut, onClick: () => setDeleteOpen(true), danger: true as const }
-      : { label: 'Удалить чат',            icon: Trash2,    onClick: () => setDeleteOpen(true), danger: true as const },
+      ? { label: chat.myRole === 'owner' ? 'Выйти / удалить группу' : 'Выйти из группы', icon: LogOut, onClick: () => onDeleteOpen({ variant: deleteVariant, onDeleteForMe: () => void handleDeleteForMe(), onDeleteForAll: () => void handleDeleteForAll(), onLeave: () => void handleLeaveGroup(), onDeleteGroup: () => void handleDeleteGroup() }), danger: true as const }
+      : { label: 'Удалить чат',            icon: Trash2,    onClick: () => onDeleteOpen({ variant: deleteVariant, onDeleteForMe: () => void handleDeleteForMe(), onDeleteForAll: () => void handleDeleteForAll(), onLeave: () => void handleLeaveGroup(), onDeleteGroup: () => void handleDeleteGroup() }), danger: true as const },
   ];
 
   // Notify parent (ChatList) when the context menu should open or close.
@@ -314,16 +322,6 @@ export function ChatListItem({ chat, active, currentUserId, onClick, onContextMe
         </div>
       </button>
 
-      {deleteOpen && (
-        <DeleteConfirmModal
-          variant={deleteVariant}
-          onClose={() => setDeleteOpen(false)}
-          onDeleteForMe={() => { setDeleteOpen(false); void handleDeleteForMe(); }}
-          onDeleteForAll={() => { setDeleteOpen(false); void handleDeleteForAll(); }}
-          onLeave={() => { setDeleteOpen(false); void handleLeaveGroup(); }}
-          onDeleteGroup={() => { setDeleteOpen(false); void handleDeleteGroup(); }}
-        />
-      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useState } from 'react';
-import { ChatListItem } from './ChatListItem';
+import { ChatListItem, DeleteConfirmModal, type DeleteConfig } from './ChatListItem';
 import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu';
 import { searchUsers, getOrCreateDirectChat } from '../../lib/chats';
 import { Avatar } from '../ui/Avatar';
@@ -51,6 +51,7 @@ export function ChatList({
     items: ContextMenuItem[];
     close: () => void;
   } | null>(null);
+  const [chatDelete, setChatDelete] = useState<DeleteConfig | null>(null);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return chats;
@@ -118,6 +119,7 @@ export function ChatList({
             onContextMenuOpen={(anchorRect, items, close) =>
               setChatMenu({ anchorRect, items, close })
             }
+            onDeleteOpen={(config) => setChatDelete(config)}
           />
         </div>
       ))}
@@ -160,6 +162,16 @@ export function ChatList({
         anchorRect={chatMenu.anchorRect}
         items={chatMenu.items}
         onClose={() => { chatMenu.close(); setChatMenu(null); }}
+      />
+    )}
+    {chatDelete && (
+      <DeleteConfirmModal
+        variant={chatDelete.variant}
+        onClose={() => setChatDelete(null)}
+        onDeleteForMe={() => { setChatDelete(null); chatDelete.onDeleteForMe(); }}
+        onDeleteForAll={() => { setChatDelete(null); chatDelete.onDeleteForAll(); }}
+        onLeave={() => { setChatDelete(null); chatDelete.onLeave(); }}
+        onDeleteGroup={() => { setChatDelete(null); chatDelete.onDeleteGroup(); }}
       />
     )}
     </div>
