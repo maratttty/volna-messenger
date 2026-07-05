@@ -1,7 +1,6 @@
 import { useLayoutEffect, useEffect, useMemo, useRef, useState, Fragment } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { MessageBubble } from '../Message/MessageBubble';
-import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu';
 import { Spinner } from '../ui/Spinner';
 import type { Message, MessageStatusValue, ReactionSummary } from '../../types/database';
 
@@ -79,14 +78,6 @@ export function MessageList({
   // immediately. Increments when new messages arrive while scrolled away.
   // Resets to 0 when the user reaches the bottom.
   const [newWhileAway, setNewWhileAway] = useState(initialUnreadCount);
-  const [messageMenu, setMessageMenu] = useState<{
-    anchorRect: DOMRect;
-    items: ContextMenuItem[];
-    close: () => void;
-    quickReactions?: string[];
-    onQuickReact?: (emoji: string) => void;
-  } | null>(null);
-
   // Computed ONCE after the initial server fetch (fetchDone = true), then frozen
   // so that realtime messages arriving while the chat is open never move the divider.
   const firstUnreadIdRef = useRef<string | null>(null);
@@ -312,9 +303,6 @@ export function MessageList({
                   onJumpToMessage={onJumpToMessage}
                   onToggleReaction={(emoji) => onToggleReaction(msg.id, emoji)}
                   onTogglePin={() => onTogglePin(msg)}
-                  onContextMenuOpen={(anchorRect, items, close, quickReactions, onQuickReact) =>
-                    setMessageMenu({ anchorRect, items, close, quickReactions, onQuickReact })
-                  }
                 />
               </div>
             </Fragment>
@@ -325,16 +313,6 @@ export function MessageList({
       {/* Floating ↓ button — positioned relative to the outer wrapper (NOT the
           scroll container), so it stays fixed in the bottom-right corner of the
           visible chat area regardless of how far the user has scrolled. */}
-      {messageMenu && (
-        <ContextMenu
-          anchorRect={messageMenu.anchorRect}
-          items={messageMenu.items}
-          onClose={() => { messageMenu.close(); setMessageMenu(null); }}
-          quickReactions={messageMenu.quickReactions}
-          onQuickReact={messageMenu.onQuickReact}
-        />
-      )}
-
       {!isNearBottom && (
         <button
           onClick={scrollToBottom}

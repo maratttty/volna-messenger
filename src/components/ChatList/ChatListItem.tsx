@@ -71,7 +71,7 @@ export function DeleteConfirmModal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-safe sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-safe"
       onClick={onClose}
     >
       <div

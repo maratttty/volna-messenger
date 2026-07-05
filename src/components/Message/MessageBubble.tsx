@@ -1,11 +1,11 @@
-import { useRef, useEffect } from 'react';
+import { useRef } from 'react';
 import { Paperclip, Reply, Pencil, Trash2, Forward, Pin, PinOff, Copy, Check, CheckCheck } from 'lucide-react';
 import type { Message, MessageStatusValue, ReactionSummary } from '../../types/database';
 import { formatMessageTime } from '../../lib/time';
 import { AudioPlayer } from './AudioPlayer';
 import { VideoNotePlayer } from './VideoNotePlayer';
 import { useContextMenu } from '../../hooks/useContextMenu';
-import { type ContextMenuItem } from '../ui/ContextMenu';
+import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -25,13 +25,6 @@ interface MessageBubbleProps {
   onJumpToMessage: (messageId: string) => void;
   onToggleReaction: (emoji: string) => void;
   onTogglePin: () => void;
-  onContextMenuOpen: (
-    anchorRect: DOMRect,
-    items: ContextMenuItem[],
-    close: () => void,
-    quickReactions?: string[],
-    onQuickReact?: (emoji: string) => void,
-  ) => void;
 }
 
 function StatusTicks({ status }: { status?: MessageStatusValue }) {
@@ -127,28 +120,9 @@ export function MessageBubble({
   onJumpToMessage,
   onToggleReaction,
   onTogglePin,
-  onContextMenuOpen,
 }: MessageBubbleProps) {
   const menu = useContextMenu();
   const bubbleRef = useRef<HTMLDivElement>(null);
-
-  // Refs keep stable values accessible inside the effect without extra deps.
-  const menuItemsRef = useRef<ContextMenuItem[]>([]);
-  const canActOnRef = useRef(false);
-  const onToggleReactionRef = useRef(onToggleReaction);
-  const onContextMenuOpenRef = useRef(onContextMenuOpen);
-
-  useEffect(() => {
-    if (!menu.position || !bubbleRef.current) return;
-    onContextMenuOpenRef.current(
-      bubbleRef.current.getBoundingClientRect(),
-      menuItemsRef.current,
-      menu.close,
-      canActOnRef.current ? QUICK_REACTIONS : undefined,
-      onToggleReactionRef.current,
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menu.position]);
 
   if (message.type === 'system') {
     return (
@@ -164,11 +138,6 @@ export function MessageBubble({
   const canCopy = message.type === 'text' && !message.deleted && !!message.content;
   const canActOn = !message.deleted && !isPending;
 
-  // Update refs so the effect always reads the latest values on next fire.
-  onToggleReactionRef.current = onToggleReaction;
-  onContextMenuOpenRef.current = onContextMenuOpen;
-  canActOnRef.current = canActOn;
-
   const menuItems: ContextMenuItem[] = canActOn
     ? [
         { label: 'Ответить',    icon: Reply,   onClick: () => onReply(message) },
@@ -181,7 +150,6 @@ export function MessageBubble({
         { label: 'Удалить', icon: Trash2, onClick: () => onDelete(message), danger: true as const },
       ]
     : [];
-  menuItemsRef.current = menuItems;
 
   return (
     <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} px-3 py-0.5`}>
@@ -242,6 +210,15 @@ export function MessageBubble({
           {isOwn && !isPending && <StatusTicks status={status} />}
         </div>
       </div>
+      {menu.position && bubbleRef.current && (
+        <ContextMenu
+          anchorRect={bubbleRef.current.getBoundingClientRect()}
+          items={menuItems}
+          onClose={menu.close}
+          quickReactions={canActOn ? QUICK_REACTIONS : undefined}
+          onQuickReact={onToggleReaction}
+        />
+      )}
     </div>
   );
 }
