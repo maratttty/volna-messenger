@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BellOff, Bell, Pin, PinOff, Check, CheckCheck, BookOpen, Trash2, X, LogOut } from 'lucide-react';
 import type { ChatWithMeta } from '../../types/database';
 import { Avatar } from '../ui/Avatar';
@@ -9,7 +9,7 @@ import {
 } from '../../lib/chats';
 import { useChatStore } from '../../store/chat-store';
 import { useContextMenu } from '../../hooks/useContextMenu';
-import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu';
+import { type ContextMenuItem } from '../ui/ContextMenu';
 
 function previewText(chat: ChatWithMeta): string {
   const msg = chat.lastMessage;
@@ -35,6 +35,7 @@ interface ChatListItemProps {
   active: boolean;
   currentUserId: string;
   onClick: () => void;
+  onContextMenuOpen: (anchorRect: DOMRect, items: ContextMenuItem[], close: () => void) => void;
 }
 
 // ── Delete confirmation modal ─────────────────────────────────────────────────
@@ -161,7 +162,7 @@ function DeleteConfirmModal({
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListItemProps) {
+export function ChatListItem({ chat, active, currentUserId, onClick, onContextMenuOpen }: ChatListItemProps) {
   const menu = useContextMenu();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -245,14 +246,24 @@ export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListI
       : { label: 'Удалить чат',            icon: Trash2,    onClick: () => setDeleteOpen(true), danger: true as const },
   ];
 
-  // Synthetic point-anchor: position menu at the exact tap/click point so it
-  // never drifts to a random row-based position near the screen edge.
-  const pointAnchor: DOMRect = menu.position
-    ? { left: menu.position.x, right: menu.position.x, top: menu.position.y, bottom: menu.position.y,
-        width: 0, height: 0, x: menu.position.x, y: menu.position.y,
-        toJSON() { return this; },
-      } as DOMRect
-    : new DOMRect();
+  // Notify parent (ChatList) when the context menu should open or close.
+  // Using refs so the effect only re-runs when position changes, not on every render.
+  const menuItemsRef = useRef(menuItems);
+  menuItemsRef.current = menuItems;
+  const onContextMenuOpenRef = useRef(onContextMenuOpen);
+  onContextMenuOpenRef.current = onContextMenuOpen;
+
+  useEffect(() => {
+    if (!menu.position) return;
+    const anchorRect = {
+      left: menu.position.x, right: menu.position.x,
+      top: menu.position.y, bottom: menu.position.y,
+      width: 0, height: 0, x: menu.position.x, y: menu.position.y,
+      toJSON() { return this; },
+    } as DOMRect;
+    onContextMenuOpenRef.current(anchorRect, menuItemsRef.current, menu.close);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menu.position]);
 
   const deleteVariant: DeleteVariant = chat.type === 'direct'
     ? { kind: 'direct', title }
@@ -268,7 +279,7 @@ export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListI
           menu.triggerProps.onPointerDown(e);
           setTimeout(() => { if ('vibrate' in navigator) navigator.vibrate(10); }, 450);
         }}
-        onClick={onClick}
+        onClick={() => { if (menu.position) return; onClick(); }}
         className={`flex w-full items-center gap-3 px-4 py-3 text-left transition active:scale-[0.98] active:bg-surface-hover ${
           active ? 'bg-surface-hover' : 'hover:bg-surface-hover'
         }`}
@@ -302,14 +313,6 @@ export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListI
           </div>
         </div>
       </button>
-
-      {menu.position && (
-        <ContextMenu
-          anchorRect={pointAnchor}
-          items={menuItems}
-          onClose={menu.close}
-        />
-      )}
 
       {deleteOpen && (
         <DeleteConfirmModal

@@ -95,21 +95,21 @@ export function ContextMenu({
 
   return (
     <>
-      {/* Overlay — separate from menu so menu's position:fixed uses the viewport, not this element */}
       <div
-        className="fixed inset-0 z-50 bg-black/40"
+        style={{ position: 'fixed', inset: 0, zIndex: 9999, pointerEvents: 'auto', background: 'rgba(0,0,0,0.4)' }}
         onClick={onClose}
         onContextMenu={(e) => { e.preventDefault(); onClose(); }}
       />
 
-      {/* Menu — sibling of overlay, not a child, to avoid containing-block bugs on mobile */}
       <div
         ref={menuRef}
         style={{
           position: 'fixed',
           left: pos.left,
           top: pos.top,
-          zIndex: 51,
+          zIndex: 10000,
+          pointerEvents: 'auto',
+          backgroundColor: 'var(--color-surface)',
           opacity: pos.visible ? 1 : 0,
           transform: pos.visible ? 'scale(1)' : 'scale(0.88)',
           transformOrigin: pos.origin,
@@ -117,7 +117,7 @@ export function ContextMenu({
             ? 'opacity 0.15s ease-out, transform 0.15s ease-out'
             : 'none',
         }}
-        className="min-w-[160px] max-w-[240px] overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl"
+        className="min-w-[160px] max-w-[240px] overflow-hidden rounded-2xl border border-border shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.stopPropagation()}
       >

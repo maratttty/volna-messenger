@@ -1,5 +1,6 @@
 import { useMemo, useEffect, useState } from 'react';
 import { ChatListItem } from './ChatListItem';
+import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu';
 import { searchUsers, getOrCreateDirectChat } from '../../lib/chats';
 import { Avatar } from '../ui/Avatar';
 import { Spinner } from '../ui/Spinner';
@@ -45,6 +46,11 @@ export function ChatList({
   const [userResults, setUserResults] = useState<Profile[]>([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [startingChatWith, setStartingChatWith] = useState<string | null>(null);
+  const [chatMenu, setChatMenu] = useState<{
+    anchorRect: DOMRect;
+    items: ContextMenuItem[];
+    close: () => void;
+  } | null>(null);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return chats;
@@ -96,6 +102,7 @@ export function ChatList({
   }
 
   return (
+    <div className="flex-1 flex flex-col">
     <div className="flex-1 overflow-y-auto">
       {filtered.map((chat, idx) => (
         <div
@@ -108,6 +115,9 @@ export function ChatList({
             active={chat.id === activeChatId}
             currentUserId={currentUserId}
             onClick={() => onSelect(chat.id)}
+            onContextMenuOpen={(anchorRect, items, close) =>
+              setChatMenu({ anchorRect, items, close })
+            }
           />
         </div>
       ))}
@@ -144,6 +154,14 @@ export function ChatList({
           {query ? 'Ничего не найдено' : 'Пока нет чатов'}
         </div>
       )}
+    </div>
+    {chatMenu && (
+      <ContextMenu
+        anchorRect={chatMenu.anchorRect}
+        items={chatMenu.items}
+        onClose={() => { chatMenu.close(); setChatMenu(null); }}
+      />
+    )}
     </div>
   );
 }
