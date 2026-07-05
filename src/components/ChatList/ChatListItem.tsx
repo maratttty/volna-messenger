@@ -1,9 +1,12 @@
-import { useState, useRef } from 'react';
-import { BellOff, Bell, Pin, PinOff, Check, CheckCheck, BookOpen, Trash2, X } from 'lucide-react';
+import { useState } from 'react';
+import { BellOff, Bell, Pin, PinOff, Check, CheckCheck, BookOpen, Trash2, X, LogOut } from 'lucide-react';
 import type { ChatWithMeta } from '../../types/database';
 import { Avatar } from '../ui/Avatar';
 import { formatRelativeTime } from '../../lib/time';
-import { setChatMuted, pinChat, unpinChat, markChatRead, markChatUnread, leaveAndDeleteChat } from '../../lib/chats';
+import {
+  setChatMuted, pinChat, unpinChat, markChatRead, markChatUnread,
+  leaveAndDeleteChat, deleteDirectChatForAll, deleteGroupChat,
+} from '../../lib/chats';
 import { useChatStore } from '../../store/chat-store';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu';
@@ -34,10 +37,133 @@ interface ChatListItemProps {
   onClick: () => void;
 }
 
+// ── Delete confirmation modal ─────────────────────────────────────────────────
+
+type DeleteVariant =
+  | { kind: 'direct'; title: string }
+  | { kind: 'group_member'; title: string }
+  | { kind: 'group_owner'; title: string };
+
+function DeleteConfirmModal({
+  variant,
+  onClose,
+  onDeleteForMe,
+  onDeleteForAll,
+  onLeave,
+  onDeleteGroup,
+}: {
+  variant: DeleteVariant;
+  onClose: () => void;
+  onDeleteForMe: () => void;
+  onDeleteForAll: () => void;
+  onLeave: () => void;
+  onDeleteGroup: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-safe sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="mx-4 mb-4 w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-xl sm:mb-0"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-1 flex items-center justify-between">
+          <p className="font-semibold text-text">
+            {variant.kind === 'group_member' ? 'Выйти из группы?' : 'Удалить чат?'}
+          </p>
+          <button onClick={onClose} className="rounded-md p-1 text-text-muted hover:bg-surface-hover">
+            <X size={16} />
+          </button>
+        </div>
+
+        {variant.kind === 'direct' && (
+          <>
+            <p className="mb-4 text-sm text-text-muted">
+              Удалить переписку с <strong>{variant.title}</strong>?
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={onDeleteForAll}
+                className="w-full rounded-xl bg-red-500 py-2.5 text-sm font-medium text-white transition hover:bg-red-600"
+              >
+                Удалить у всех
+              </button>
+              <button
+                onClick={onDeleteForMe}
+                className="w-full rounded-xl border border-border py-2.5 text-sm font-medium text-text transition hover:bg-surface-hover"
+              >
+                Удалить у себя
+              </button>
+              <button
+                onClick={onClose}
+                className="w-full rounded-xl py-2 text-sm text-text-muted transition hover:bg-surface-hover"
+              >
+                Отмена
+              </button>
+            </div>
+          </>
+        )}
+
+        {variant.kind === 'group_member' && (
+          <>
+            <p className="mb-4 text-sm text-text-muted">
+              Вы покинете <strong>{variant.title}</strong>. Сообщения останутся у остальных участников.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={onClose}
+                className="flex-1 rounded-xl border border-border py-2 text-sm font-medium text-text transition hover:bg-surface-hover"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={onLeave}
+                className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-medium text-white transition hover:bg-red-600"
+              >
+                Выйти
+              </button>
+            </div>
+          </>
+        )}
+
+        {variant.kind === 'group_owner' && (
+          <>
+            <p className="mb-4 text-sm text-text-muted">
+              Вы владелец группы <strong>{variant.title}</strong>.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={onDeleteGroup}
+                className="w-full rounded-xl bg-red-500 py-2.5 text-sm font-medium text-white transition hover:bg-red-600"
+              >
+                Удалить группу для всех
+              </button>
+              <button
+                onClick={onLeave}
+                className="w-full rounded-xl border border-border py-2.5 text-sm font-medium text-text transition hover:bg-surface-hover"
+              >
+                Выйти из группы
+              </button>
+              <button
+                onClick={onClose}
+                className="w-full rounded-xl py-2 text-sm text-text-muted transition hover:bg-surface-hover"
+              >
+                Отмена
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
+
 export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListItemProps) {
   const menu = useContextMenu();
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const title     = chat.type === 'direct' ? chat.otherUser?.display_name ?? '...' : chat.title ?? 'Группа';
   const avatarSrc = chat.type === 'direct' ? chat.otherUser?.avatar_url : chat.avatar_url;
@@ -78,26 +204,30 @@ export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListI
     try { await markChatUnread(chat.id, currentUserId); } catch { /* ignore */ }
   }
 
-  async function handleDelete() {
+  function removeChatLocally() {
     useChatStore.getState().removeChat(chat.id);
     const { activeChatId, setActiveChatId } = useChatStore.getState();
     if (activeChatId === chat.id) setActiveChatId(null);
-    try { await leaveAndDeleteChat(chat.id, currentUserId); } catch { /* ignore — already removed locally */ }
   }
 
-  // Haptic feedback on mobile long-press (best-effort — not all devices support it)
-  function handleTriggerProps() {
-    const base = menu.triggerProps;
-    return {
-      ...base,
-      onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
-        base.onPointerDown(e);
-        // Schedule haptic at the same moment the long-press fires
-        setTimeout(() => {
-          if ('vibrate' in navigator) navigator.vibrate(10);
-        }, 450);
-      },
-    };
+  async function handleDeleteForMe() {
+    removeChatLocally();
+    try { await leaveAndDeleteChat(chat.id, currentUserId); } catch { /* ignore */ }
+  }
+
+  async function handleDeleteForAll() {
+    removeChatLocally();
+    try { await deleteDirectChatForAll(chat.id); } catch { /* ignore */ }
+  }
+
+  async function handleLeaveGroup() {
+    removeChatLocally();
+    try { await leaveAndDeleteChat(chat.id, currentUserId); } catch { /* ignore */ }
+  }
+
+  async function handleDeleteGroup() {
+    removeChatLocally();
+    try { await deleteGroupChat(chat.id); } catch { /* ignore */ }
   }
 
   const menuItems: ContextMenuItem[] = [
@@ -110,15 +240,34 @@ export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListI
     chat.unreadCount > 0
       ? { label: 'Отметить прочитанным',   icon: CheckCheck, onClick: () => void handleMarkRead() }
       : { label: 'Отметить непрочитанным', icon: BookOpen,   onClick: () => void handleMarkUnread() },
-    { label: 'В папку',   icon: Pin,     onClick: () => {}, disabled: true },
-    { label: 'Удалить чат', icon: Trash2, onClick: () => setConfirmDelete(true), danger: true },
+    chat.type === 'group'
+      ? { label: chat.myRole === 'owner' ? 'Выйти / удалить группу' : 'Выйти из группы', icon: LogOut, onClick: () => setDeleteOpen(true), danger: true as const }
+      : { label: 'Удалить чат',            icon: Trash2,    onClick: () => setDeleteOpen(true), danger: true as const },
   ];
+
+  // Synthetic point-anchor: position menu at the exact tap/click point so it
+  // never drifts to a random row-based position near the screen edge.
+  const pointAnchor: DOMRect = menu.position
+    ? { left: menu.position.x, right: menu.position.x, top: menu.position.y, bottom: menu.position.y,
+        width: 0, height: 0, x: menu.position.x, y: menu.position.y,
+        toJSON() { return this; },
+      } as DOMRect
+    : new DOMRect();
+
+  const deleteVariant: DeleteVariant = chat.type === 'direct'
+    ? { kind: 'direct', title }
+    : chat.myRole === 'owner'
+      ? { kind: 'group_owner', title }
+      : { kind: 'group_member', title };
 
   return (
     <div className="relative">
       <button
-        ref={buttonRef}
-        {...handleTriggerProps()}
+        {...menu.triggerProps}
+        onPointerDown={(e) => {
+          menu.triggerProps.onPointerDown(e);
+          setTimeout(() => { if ('vibrate' in navigator) navigator.vibrate(10); }, 450);
+        }}
         onClick={onClick}
         className={`flex w-full items-center gap-3 px-4 py-3 text-left transition active:scale-[0.98] active:bg-surface-hover ${
           active ? 'bg-surface-hover' : 'hover:bg-surface-hover'
@@ -154,49 +303,23 @@ export function ChatListItem({ chat, active, currentUserId, onClick }: ChatListI
         </div>
       </button>
 
-      {menu.position && buttonRef.current && (
+      {menu.position && (
         <ContextMenu
-          anchorRect={buttonRef.current.getBoundingClientRect()}
+          anchorRect={pointAnchor}
           items={menuItems}
           onClose={menu.close}
         />
       )}
 
-      {/* Delete confirmation dialog */}
-      {confirmDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-          onClick={() => setConfirmDelete(false)}
-        >
-          <div
-            className="mx-4 w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-1 flex items-center justify-between">
-              <p className="font-semibold text-text">Удалить чат?</p>
-              <button onClick={() => setConfirmDelete(false)} className="rounded-md p-1 text-text-muted hover:bg-surface-hover">
-                <X size={16} />
-              </button>
-            </div>
-            <p className="mb-5 text-sm text-text-muted">
-              Чат с <strong>{title}</strong> исчезнет из вашего списка. Другие участники его не потеряют.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setConfirmDelete(false)}
-                className="flex-1 rounded-xl border border-border py-2 text-sm font-medium text-text transition hover:bg-surface-hover"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={() => { setConfirmDelete(false); void handleDelete(); }}
-                className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-medium text-white transition hover:bg-red-600"
-              >
-                Удалить
-              </button>
-            </div>
-          </div>
-        </div>
+      {deleteOpen && (
+        <DeleteConfirmModal
+          variant={deleteVariant}
+          onClose={() => setDeleteOpen(false)}
+          onDeleteForMe={() => { setDeleteOpen(false); void handleDeleteForMe(); }}
+          onDeleteForAll={() => { setDeleteOpen(false); void handleDeleteForAll(); }}
+          onLeave={() => { setDeleteOpen(false); void handleLeaveGroup(); }}
+          onDeleteGroup={() => { setDeleteOpen(false); void handleDeleteGroup(); }}
+        />
       )}
     </div>
   );

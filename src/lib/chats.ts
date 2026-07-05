@@ -432,3 +432,16 @@ export async function leaveAndDeleteChat(chatId: string, userId: string): Promis
     .eq('user_id', userId);
   if (error) throw error;
 }
+
+// Removes both participants from a direct chat — makes it disappear for everyone
+// in real-time via the existing chat_members DELETE realtime listener.
+export async function deleteDirectChatForAll(chatId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_direct_chat_for_all', { p_chat_id: chatId });
+  if (error) throw error;
+}
+
+// Dissolves a group chat (owner only). All members lose the chat in real-time.
+export async function deleteGroupChat(chatId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_group_chat', { p_chat_id: chatId });
+  if (error) throw error;
+}
