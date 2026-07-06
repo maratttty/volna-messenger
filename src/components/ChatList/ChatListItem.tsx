@@ -231,8 +231,10 @@ export function ChatListItem({ chat, active, currentUserId, onClick, onContextMe
   }
 
   async function handleDeleteForAll() {
-    try { await deleteDirectChatForAll(chat.id); } catch { /* ignore */ }
-    removeChatLocally();
+    try {
+      await deleteDirectChatForAll(chat.id);
+      removeChatLocally();
+    } catch { /* RPC failed — leave chat in list so user can retry */ }
   }
 
   async function handleLeaveGroup() {

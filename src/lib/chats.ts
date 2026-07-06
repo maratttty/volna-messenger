@@ -156,13 +156,15 @@ export async function getOrCreateDirectChat(
   currentUserId: string,
   otherUserId: string,
 ): Promise<string> {
-  // Check if a direct chat already exists between the two users
+  // Include hidden_at so we can detect and restore soft-deleted chats
   const { data: existing } = await supabase
     .from('chat_members')
-    .select('chat_id')
+    .select('chat_id, hidden_at')
     .eq('user_id', currentUserId);
 
-  const myChats = (existing ?? []).map((r: { chat_id: string }) => r.chat_id);
+  type MyMembership = { chat_id: string; hidden_at: string | null };
+  const myMemberships = (existing ?? []) as MyMembership[];
+  const myChats = myMemberships.map((r) => r.chat_id);
 
   if (myChats.length > 0) {
     const { data: shared } = await supabase
@@ -181,7 +183,18 @@ export async function getOrCreateDirectChat(
         .in('id', sharedIds);
 
       if (directChats && directChats.length > 0) {
-        return directChats[0].id as string;
+        const chatId = directChats[0].id as string;
+        // If the chat was soft-deleted ("delete for me"), unhide it so it
+        // reappears in the list when the user intentionally starts a new conversation.
+        const mine = myMemberships.find((r) => r.chat_id === chatId);
+        if (mine?.hidden_at) {
+          await supabase
+            .from('chat_members')
+            .update({ hidden_at: null })
+            .eq('chat_id', chatId)
+            .eq('user_id', currentUserId);
+        }
+        return chatId;
       }
     }
   }
