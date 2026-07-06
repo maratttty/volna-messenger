@@ -133,6 +133,16 @@ export function useChats() {
         },
         () => void reload(), // removed from a group
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'chat_members',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => void reload(), // hidden_at changed (soft-delete or restore)
+      )
       .subscribe((status) => {
         // Skip the initial SUBSCRIBED (already covered by the reload() call
         // above) — only re-sync on a SUBSCRIBED that follows a drop, since

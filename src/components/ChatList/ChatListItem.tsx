@@ -220,7 +220,6 @@ export function ChatListItem({ chat, active, currentUserId, onClick, onContextMe
   }
 
   async function handleDeleteForMe() {
-    removeChatLocally();
     try {
       if (chat.type === 'direct') {
         await hideDirectChatForMe(chat.id, currentUserId);
@@ -228,21 +227,22 @@ export function ChatListItem({ chat, active, currentUserId, onClick, onContextMe
         await leaveAndDeleteChat(chat.id, currentUserId);
       }
     } catch { /* ignore */ }
+    removeChatLocally();
   }
 
   async function handleDeleteForAll() {
-    removeChatLocally();
     try { await deleteDirectChatForAll(chat.id); } catch { /* ignore */ }
+    removeChatLocally();
   }
 
   async function handleLeaveGroup() {
-    removeChatLocally();
     try { await leaveAndDeleteChat(chat.id, currentUserId); } catch { /* ignore */ }
+    removeChatLocally();
   }
 
   async function handleDeleteGroup() {
-    removeChatLocally();
     try { await deleteGroupChat(chat.id); } catch { /* ignore */ }
+    removeChatLocally();
   }
 
   const menuItems: ContextMenuItem[] = [
