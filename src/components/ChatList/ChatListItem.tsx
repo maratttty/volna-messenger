@@ -5,7 +5,7 @@ import { Avatar } from '../ui/Avatar';
 import { formatRelativeTime } from '../../lib/time';
 import {
   setChatMuted, pinChat, unpinChat, markChatRead, markChatUnread,
-  leaveAndDeleteChat, deleteDirectChatForAll, deleteGroupChat,
+  hideDirectChatForMe, leaveAndDeleteChat, deleteDirectChatForAll, deleteGroupChat,
 } from '../../lib/chats';
 import { useChatStore } from '../../store/chat-store';
 import { useContextMenu } from '../../hooks/useContextMenu';
@@ -221,7 +221,13 @@ export function ChatListItem({ chat, active, currentUserId, onClick, onContextMe
 
   async function handleDeleteForMe() {
     removeChatLocally();
-    try { await leaveAndDeleteChat(chat.id, currentUserId); } catch { /* ignore */ }
+    try {
+      if (chat.type === 'direct') {
+        await hideDirectChatForMe(chat.id, currentUserId);
+      } else {
+        await leaveAndDeleteChat(chat.id, currentUserId);
+      }
+    } catch { /* ignore */ }
   }
 
   async function handleDeleteForAll() {

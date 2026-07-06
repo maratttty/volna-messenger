@@ -144,7 +144,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
     statuses,
     reactions,
     toggleReaction,
-  } = useMessages(chat.id, currentUserId);
+  } = useMessages(chat.id, currentUserId, chat.hidden_before_at);
   const { activityUsers, notifyTyping, notifyActivity, notifyActivityStop } = useTyping(chat.id, currentUserId, currentUserDisplayName);
 
   const [replyTarget, setReplyTarget] = useState<Message | null>(null);

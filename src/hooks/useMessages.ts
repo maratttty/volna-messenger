@@ -20,7 +20,7 @@ import { useMessageStore } from '../store/message-store';
 import { useChatStore } from '../store/chat-store';
 import type { Message, MessageStatusValue, MessageType, ReactionSummary } from '../types/database';
 
-export function useMessages(chatId: string | null, currentUserId: string | undefined) {
+export function useMessages(chatId: string | null, currentUserId: string | undefined, hiddenBeforeAt?: string | null) {
   const { messages, hasMore, setMessages, prependMessages, appendMessage, updateMessage, removeMessage } =
     useMessageStore();
   const chatMessages = chatId ? messages[chatId] ?? [] : [];
@@ -67,7 +67,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
 
     setFetchDone(false);
     setLoading(true);
-    fetchMessages(chatId, currentUserId)
+    fetchMessages(chatId, currentUserId, undefined, hiddenBeforeAt)
       .then(({ messages: page, hasMore: more }) => {
         if (cancelled) return;
         setMessages(chatId, page, more);
@@ -92,7 +92,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     // catch up after a dropped connection.
     async function catchUp() {
       if (cancelled || !chatId || !currentUserId) return;
-      const { messages: page } = await fetchMessages(chatId, currentUserId);
+      const { messages: page } = await fetchMessages(chatId, currentUserId, undefined, hiddenBeforeAt);
       const existing = useMessageStore.getState().messages[chatId] ?? [];
       const merged = [...existing];
       for (const msg of page) {
@@ -189,12 +189,12 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     setLoadingMore(true);
     try {
       const oldest = chatMessages[0].created_at;
-      const { messages: page, hasMore: more } = await fetchMessages(chatId, currentUserId, oldest);
+      const { messages: page, hasMore: more } = await fetchMessages(chatId, currentUserId, oldest, hiddenBeforeAt);
       prependMessages(chatId, page, more);
     } finally {
       setLoadingMore(false);
     }
-  }, [chatId, currentUserId, chatHasMore, chatMessages, loadingMore, prependMessages]);
+  }, [chatId, currentUserId, chatHasMore, chatMessages, loadingMore, prependMessages, hiddenBeforeAt]);
 
   // Search results can point at messages older than what's currently paged
   // in. Reads the pagination cursor fresh from the store on every loop turn
@@ -214,7 +214,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
           if (!useMessageStore.getState().hasMore[chatId] || current.length === 0) return;
 
           const oldest = current[0].created_at;
-          const { messages: page, hasMore: more } = await fetchMessages(chatId, currentUserId, oldest);
+          const { messages: page, hasMore: more } = await fetchMessages(chatId, currentUserId, oldest, hiddenBeforeAt);
           if (page.length === 0) return;
           prependMessages(chatId, page, more);
         }
@@ -222,7 +222,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         setLoadingMore(false);
       }
     },
-    [chatId, currentUserId, loadingMore, prependMessages],
+    [chatId, currentUserId, loadingMore, prependMessages, hiddenBeforeAt],
   );
 
   const pendingClientIds = useRef(new Set<string>());

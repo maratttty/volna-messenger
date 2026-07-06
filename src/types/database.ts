@@ -36,6 +36,8 @@ export interface ChatMember {
   muted: boolean;
   last_read_message_id: string | null;
   pinned_at: string | null;
+  hidden_at: string | null;
+  hidden_before_at: string | null;
 }
 
 export interface Message {
@@ -123,6 +125,7 @@ export interface ChatWithMeta extends Chat {
   pinned_at: string | null;           // from chat_members; null = not pinned
   last_read_message_id: string | null; // read cursor for this user
   lastMessageReadByOther?: boolean;    // true when the other participant has read my last message
+  hidden_before_at?: string | null;   // messages older than this are hidden (soft-delete for me)
 }
 
 export interface Database {

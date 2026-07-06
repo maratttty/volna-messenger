@@ -10,8 +10,9 @@ export async function fetchChats(userId: string): Promise<ChatWithMeta[]> {
   // ── Round 1: memberships ──────────────────────────────────────────
   const { data: memberships, error: memErr } = await supabase
     .from('chat_members')
-    .select('chat_id, role, last_read_message_id, muted, pinned_at')
-    .eq('user_id', userId);
+    .select('chat_id, role, last_read_message_id, muted, pinned_at, hidden_before_at')
+    .eq('user_id', userId)
+    .is('hidden_at', null);
 
   if (memErr) throw memErr;
   if (!memberships || memberships.length === 0) return [];
@@ -77,7 +78,7 @@ export async function fetchChats(userId: string): Promise<ChatWithMeta[]> {
   for (const m of otherReadMsgs ?? []) otherReadAtById.set(m.id, m.created_at);
 
   // ── Round 4: per-chat last message + unread count in parallel ─────
-  type Membership = { chat_id: string; role: MemberRole; last_read_message_id: string | null; muted: boolean; pinned_at: string | null };
+  type Membership = { chat_id: string; role: MemberRole; last_read_message_id: string | null; muted: boolean; pinned_at: string | null; hidden_before_at: string | null };
   const membershipByChatId = new Map(
     (memberships as Membership[]).map((m) => [m.chat_id, m]),
   );
@@ -141,6 +142,7 @@ export async function fetchChats(userId: string): Promise<ChatWithMeta[]> {
         pinned_at:                (membership?.pinned_at as string | null) ?? null,
         last_read_message_id:     lastReadId,
         lastMessageReadByOther,
+        hidden_before_at:         (membership?.hidden_before_at as string | null) ?? null,
       } as ChatWithMeta;
     }),
   );
@@ -422,7 +424,22 @@ export async function markChatUnread(chatId: string, userId: string): Promise<vo
   if (error) throw error;
 }
 
-// "Delete" from the user's perspective = leave the chat (remove membership).
+// "Delete for me" on a direct chat: soft-hide instead of deleting the membership.
+// hidden_at hides the chat from the list; hidden_before_at filters out old messages
+// so history isn't shown when the chat reappears after a new message.
+// A DB trigger (clear_chat_hidden_on_message) clears hidden_at automatically
+// when the other participant sends a new message.
+export async function hideDirectChatForMe(chatId: string, userId: string): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('chat_members')
+    .update({ hidden_at: now, hidden_before_at: now })
+    .eq('chat_id', chatId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+// "Leave" from the user's perspective = remove membership (used for groups).
 // The chat itself and its messages remain for other members.
 export async function leaveAndDeleteChat(chatId: string, userId: string): Promise<void> {
   const { error } = await supabase

@@ -29,10 +29,13 @@ export async function fetchMessageById(messageId: string): Promise<Message | nul
 
 // Cursor-based pagination: fetch messages older than `before` (or the most
 // recent page if `before` is omitted), returned oldest-first for rendering.
+// afterTimestamp: when set, skips messages older than this timestamp — used to
+// hide history before a "delete for me" soft-delete point.
 export async function fetchMessages(
   chatId: string,
   userId: string,
   before?: string,
+  afterTimestamp?: string | null,
 ): Promise<{ messages: Message[]; hasMore: boolean }> {
   const hiddenIds = await fetchHiddenMessageIds(chatId, userId);
 
@@ -45,6 +48,7 @@ export async function fetchMessages(
     .limit(PAGE_SIZE + 1);
 
   if (before) query = query.lt('created_at', before);
+  if (afterTimestamp) query = query.gt('created_at', afterTimestamp);
   if (hiddenIds.length > 0) query = query.not('id', 'in', `(${hiddenIds.join(',')})`);
 
   const { data, error } = await query;
