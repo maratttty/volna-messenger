@@ -74,12 +74,20 @@ function MessageContent({ message }: { message: Message }) {
 
     case 'voice':
       return (
-        <AudioPlayer src={message.attachment_url ?? ''} duration={message.attachment_meta?.duration} />
+        <AudioPlayer
+          src={message.attachment_url ?? ''}
+          duration={message.attachment_meta?.duration}
+          mimeType={message.attachment_meta?.mime}
+        />
       );
 
     case 'video_note':
       return (
-        <VideoNotePlayer src={message.attachment_url ?? ''} durationSeconds={message.attachment_meta?.duration} />
+        <VideoNotePlayer
+          src={message.attachment_url ?? ''}
+          durationSeconds={message.attachment_meta?.duration}
+          mimeType={message.attachment_meta?.mime}
+        />
       );
 
     default:

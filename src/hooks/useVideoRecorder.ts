@@ -1,8 +1,16 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { MAX_VIDEO_NOTE_DURATION_SECONDS } from '../config';
 
-// iOS Safari supports video/mp4 but not video/webm — list mp4 first.
-const CANDIDATE_MIME_TYPES = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+// Preference order: H.264+AAC in MP4 (Safari + Chrome 108+ Mac/iOS),
+// then webm variants (Chrome/Firefox on Windows/Linux/Android).
+const CANDIDATE_MIME_TYPES = [
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2', // H.264 Baseline + AAC-LC — Chrome 108+ Mac, Safari
+  'video/mp4;codecs=avc1,mp4a.40.2',         // H.264 + AAC variant
+  'video/mp4',                                // generic MP4 — Safari, iOS
+  'video/webm;codecs=vp9,opus',               // Chrome/Firefox (non-Mac)
+  'video/webm;codecs=vp8,opus',
+  'video/webm',
+];
 
 function pickMimeType(): string {
   for (const type of CANDIDATE_MIME_TYPES) {

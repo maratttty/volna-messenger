@@ -1,8 +1,17 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { MAX_VOICE_DURATION_SECONDS } from '../config';
 
-// iOS Safari only supports audio/mp4 — list it before webm so it's picked first on iOS.
-const CANDIDATE_MIME_TYPES = ['audio/mp4', 'audio/webm', 'audio/ogg'];
+// Preference order: AAC in MP4 first (Safari + Chrome 108+ on Mac/iOS),
+// then webm/opus (Chrome/Firefox on Windows/Linux/Android),
+// then plain mp4/webm as fallbacks, then ogg for Firefox.
+const CANDIDATE_MIME_TYPES = [
+  'audio/mp4;codecs=mp4a.40.2', // AAC-LC — Safari, Chrome 108+ Mac
+  'audio/mp4',                   // AAC generic — Safari, iOS
+  'audio/webm;codecs=opus',      // Opus/WebM — Chrome, Firefox (non-Mac)
+  'audio/webm',
+  'audio/ogg;codecs=opus',
+  'audio/ogg',
+];
 
 function pickMimeType(): string {
   for (const type of CANDIDATE_MIME_TYPES) {

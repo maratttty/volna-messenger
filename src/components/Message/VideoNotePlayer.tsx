@@ -5,6 +5,7 @@ import { CircularProgressRing } from '../ui/CircularProgressRing';
 interface VideoNotePlayerProps {
   src: string;
   durationSeconds?: number;
+  mimeType?: string;
 }
 
 const SIZE         = 200;  // circle diameter, px
@@ -16,7 +17,7 @@ function fmt(s: number) {
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 }
 
-export function VideoNotePlayer({ src, durationSeconds }: VideoNotePlayerProps) {
+export function VideoNotePlayer({ src, durationSeconds, mimeType }: VideoNotePlayerProps) {
   const videoRef      = useRef<HTMLVideoElement>(null);
   const wrapperRef    = useRef<HTMLButtonElement>(null);
 
@@ -135,11 +136,12 @@ export function VideoNotePlayer({ src, durationSeconds }: VideoNotePlayerProps) 
       >
         <video
           ref={videoRef}
-          src={src}
           className="h-full w-full object-cover"
           playsInline
           preload="metadata"
-        />
+        >
+          <source src={src} type={mimeType ?? undefined} />
+        </video>
 
         {/* Play overlay — shown when paused/idle */}
         {!playing && (
