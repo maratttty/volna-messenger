@@ -39,7 +39,7 @@ function formatBytes(size?: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
-function MessageContent({ message }: { message: Message }) {
+function MessageContent({ message, senderName }: { message: Message; senderName?: string }) {
   if (message.deleted) {
     return <p className="text-sm italic text-text-muted">Сообщение удалено</p>;
   }
@@ -77,6 +77,8 @@ function MessageContent({ message }: { message: Message }) {
         <AudioPlayer
           src={message.attachment_url ?? ''}
           duration={message.attachment_meta?.duration}
+          messageId={message.id}
+          senderName={senderName ?? ''}
         />
       );
 
@@ -85,6 +87,8 @@ function MessageContent({ message }: { message: Message }) {
         <VideoNotePlayer
           src={message.attachment_url ?? ''}
           durationSeconds={message.attachment_meta?.duration}
+          messageId={message.id}
+          senderName={senderName ?? ''}
         />
       );
 
@@ -188,7 +192,7 @@ export function MessageBubble({
             <p className="truncate text-xs text-text-muted">{repliedPreviewText(repliedMessage)}</p>
           </button>
         )}
-        <MessageContent message={message} />
+        <MessageContent message={message} senderName={senderName} />
         {reactions && reactions.length > 0 && (
           <div className={`mt-1 flex flex-wrap gap-1 ${isVideoNote ? 'px-1' : ''}`}>
             {reactions.map((r) => (

@@ -1,14 +1,17 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Play, Volume2, Eye } from 'lucide-react';
 import { CircularProgressRing } from '../ui/CircularProgressRing';
+import { usePlaybackStore } from '../../stores/playbackStore';
 
 interface VideoNotePlayerProps {
   src: string;
   durationSeconds?: number;
+  messageId: string;
+  senderName: string;
 }
 
-const SIZE         = 200;  // circle diameter, px
-const RING_PADDING = 5;    // ring outside the circle rim
+const SIZE         = 200;
+const RING_PADDING = 5;
 const OUTER        = SIZE + RING_PADDING * 2;
 
 function fmt(s: number) {
@@ -16,15 +19,26 @@ function fmt(s: number) {
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 }
 
-export function VideoNotePlayer({ src, durationSeconds }: VideoNotePlayerProps) {
-  const videoRef      = useRef<HTMLVideoElement>(null);
-  const wrapperRef    = useRef<HTMLButtonElement>(null);
+export function VideoNotePlayer({ src, durationSeconds, messageId, senderName }: VideoNotePlayerProps) {
+  const videoRef   = useRef<HTMLVideoElement>(null);
+  const wrapperRef = useRef<HTMLButtonElement>(null);
 
   const [playing,     setPlaying]  = useState(false);
-  const [muted,       setMuted]    = useState(true);   // silent until user taps
+  const [localMuted,  setLocalMuted] = useState(true);
   const [viewed,      setViewed]   = useState(false);
   const [currentTime, setCurrent]  = useState(0);
   const [duration,    setDuration] = useState(durationSeconds ?? 0);
+
+  const isActive   = usePlaybackStore(s => s.messageId === messageId);
+  const isPending  = usePlaybackStore(s => s.pendingPlay === messageId);
+  const activate   = usePlaybackStore(s => s.activate);
+  const deactivate = usePlaybackStore(s => s.deactivate);
+  const storeSetPlaying = usePlaybackStore(s => s.setPlaying);
+  const setPending = usePlaybackStore(s => s.setPendingPlay);
+
+  // effectiveMuted: use store muted when active (panel can toggle it), local otherwise
+  const storeMuted = usePlaybackStore(s => s.muted);
+  const effectiveMuted = isActive ? storeMuted : localMuted;
 
   // ── Smooth progress via RAF ─────────────────────────────────────
   useEffect(() => {
@@ -45,9 +59,20 @@ export function VideoNotePlayer({ src, durationSeconds }: VideoNotePlayerProps) 
     if (!v) return;
 
     const onMeta  = () => { if (Number.isFinite(v.duration)) setDuration(v.duration); };
-    const onEnded = () => { setPlaying(false); setCurrent(0); setViewed(true); };
-    const onPause = () => setPlaying(false);
-    const onPlay  = () => setPlaying(true);
+    const onEnded = () => {
+      setPlaying(false);
+      setCurrent(0);
+      setViewed(true);
+      if (usePlaybackStore.getState().messageId === messageId) deactivate();
+    };
+    const onPause = () => {
+      setPlaying(false);
+      if (usePlaybackStore.getState().messageId === messageId) storeSetPlaying(false);
+    };
+    const onPlay  = () => {
+      setPlaying(true);
+      if (usePlaybackStore.getState().messageId === messageId) storeSetPlaying(true);
+    };
 
     v.addEventListener('loadedmetadata', onMeta);
     v.addEventListener('ended',  onEnded);
@@ -59,7 +84,31 @@ export function VideoNotePlayer({ src, durationSeconds }: VideoNotePlayerProps) 
       v.removeEventListener('pause',  onPause);
       v.removeEventListener('play',   onPlay);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Deactivate store on unmount if active ──────────────────────
+  useEffect(() => {
+    return () => {
+      if (usePlaybackStore.getState().messageId === messageId) {
+        usePlaybackStore.getState().deactivate();
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Auto-start when prev/next triggers this player ─────────────
+  useEffect(() => {
+    if (!isPending || !videoRef.current) return;
+    const v = videoRef.current;
+    v.muted       = false;
+    v.currentTime = 0;
+    setLocalMuted(false);
+    activate(messageId, 'video_note', senderName, v);
+    setPending(null);
+    v.play().catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPending]);
 
   // ── Auto-play muted when video enters the viewport (≥60%) ──────
   const autoplayRef = useRef(false);
@@ -75,9 +124,8 @@ export function VideoNotePlayer({ src, durationSeconds }: VideoNotePlayerProps) 
           autoplayRef.current = true;
           v.muted    = true;
           v.currentTime = 0;
-          v.play().catch(() => { /* iOS may block — silently ignore */ });
+          v.play().catch(() => {});
         } else if (!visible && v.muted) {
-          // Muted autoplay — pause when scrolled away
           v.pause();
           v.currentTime = 0;
           autoplayRef.current = false;
@@ -98,14 +146,15 @@ export function VideoNotePlayer({ src, durationSeconds }: VideoNotePlayerProps) 
       // First real tap: restart from beginning with sound
       v.muted       = false;
       v.currentTime = 0;
-      setMuted(false);
+      setLocalMuted(false);
+      activate(messageId, 'video_note', senderName, v);
       v.play().catch(() => { v.muted = false; });
     } else if (playing) {
       v.pause();
     } else {
       v.play().catch(() => {});
     }
-  }, [playing]);
+  }, [playing, activate, messageId, senderName]);
 
   const progress  = duration > 0 ? currentTime / duration : 0;
   const remaining = Math.max(0, duration - currentTime);
@@ -118,8 +167,8 @@ export function VideoNotePlayer({ src, durationSeconds }: VideoNotePlayerProps) 
       style={{ width: OUTER, height: OUTER }}
       aria-label="Видео-сообщение"
     >
-      {/* Circular progress ring — only when playing with sound (after tap) */}
-      {!muted && (
+      {/* Circular progress ring — only when playing with sound */}
+      {!effectiveMuted && (
         <CircularProgressRing
           progress={progress}
           size={OUTER}
@@ -145,7 +194,7 @@ export function VideoNotePlayer({ src, durationSeconds }: VideoNotePlayerProps) 
         {!playing && (
           <span className="absolute inset-0 flex items-center justify-center bg-black/20 transition-opacity duration-150">
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/40">
-              {muted
+              {effectiveMuted
                 ? <Volume2 size={22} className="text-white drop-shadow" />
                 : <Play    size={22} className="fill-white text-white drop-shadow" />
               }

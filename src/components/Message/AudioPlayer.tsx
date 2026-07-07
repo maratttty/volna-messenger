@@ -1,9 +1,12 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
 import { Play, Pause } from 'lucide-react';
+import { usePlaybackStore } from '../../stores/playbackStore';
 
 interface AudioPlayerProps {
   src: string;
   duration?: number;
+  messageId: string;
+  senderName: string;
 }
 
 const BAR_COUNT = 28;
@@ -14,9 +17,6 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-// Deterministic pseudo-waveform from the src string — we don't decode the
-// actual audio, but a stable per-message bar pattern reads better than a
-// plain progress line and doesn't require extra processing on upload.
 function generateBarHeights(seed: string): number[] {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
@@ -28,30 +28,67 @@ function generateBarHeights(seed: string): number[] {
   return heights;
 }
 
-export function AudioPlayer({ src, duration }: AudioPlayerProps) {
+export function AudioPlayer({ src, duration, messageId, senderName }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const barHeights = useMemo(() => generateBarHeights(src), [src]);
 
+  const isActive    = usePlaybackStore(s => s.messageId === messageId);
+  const playing     = usePlaybackStore(s => s.messageId === messageId && s.playing);
+  const isPending   = usePlaybackStore(s => s.pendingPlay === messageId);
+  const activate    = usePlaybackStore(s => s.activate);
+  const deactivate  = usePlaybackStore(s => s.deactivate);
+  const setPlaying  = usePlaybackStore(s => s.setPlaying);
+  const setPending  = usePlaybackStore(s => s.setPendingPlay);
+
+  // Auto-start when prev/next triggers this player
+  useEffect(() => {
+    if (!isPending || !audioRef.current) return;
+    const audio = audioRef.current;
+    activate(messageId, 'voice', senderName, audio);
+    setPending(null);
+    void audio.play();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPending]);
+
+  // Deactivate store on unmount if we were active
+  useEffect(() => {
+    return () => {
+      if (usePlaybackStore.getState().messageId === messageId) {
+        usePlaybackStore.getState().deactivate();
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Audio native events → keep store in sync
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
     const onEnded = () => {
-      setPlaying(false);
       setCurrentTime(0);
+      if (usePlaybackStore.getState().messageId === messageId) deactivate();
+    };
+    const onPause = () => {
+      if (usePlaybackStore.getState().messageId === messageId) setPlaying(false);
+    };
+    const onPlay = () => {
+      if (usePlaybackStore.getState().messageId === messageId) setPlaying(true);
     };
     audio.addEventListener('ended', onEnded);
+    audio.addEventListener('pause', onPause);
+    audio.addEventListener('play', onPlay);
     return () => {
       audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('pause', onPause);
+      audio.removeEventListener('play', onPlay);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // requestAnimationFrame instead of the audio "timeupdate" event — timeupdate
-  // only fires a few times a second, which made the waveform fill visibly
-  // stutter. rAF reads currentTime every frame for a smooth sweep.
+  // RAF → update local waveform progress
   useEffect(() => {
-    if (!playing) return;
+    if (!isActive || !playing) return;
     let rafId: number;
     const tick = () => {
       const audio = audioRef.current;
@@ -60,21 +97,22 @@ export function AudioPlayer({ src, duration }: AudioPlayerProps) {
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, [playing]);
+  }, [isActive, playing]);
 
   function toggle() {
     const audio = audioRef.current;
     if (!audio) return;
-    if (playing) {
+    if (isActive && playing) {
       audio.pause();
       setPlaying(false);
     } else {
+      activate(messageId, 'voice', senderName, audio);
       void audio.play();
-      setPlaying(true);
     }
   }
 
-  const effectiveDuration = audioRef.current?.duration || duration || 0;
+  const el = audioRef.current;
+  const effectiveDuration = (el && isFinite(el.duration)) ? el.duration : (duration ?? 0);
   const progress = effectiveDuration > 0 ? currentTime / effectiveDuration : 0;
   const exactBarIndex = progress * BAR_COUNT;
 

@@ -19,6 +19,7 @@ import { ForwardModal } from './ForwardModal';
 import { ChatSearchBar } from './ChatSearchBar';
 import { GroupMembersPanel } from './GroupMembersPanel';
 import { Avatar } from '../ui/Avatar';
+import { MediaPlaybackPanel } from './MediaPlaybackPanel';
 
 interface ChatViewProps {
   chat: ChatWithMeta;
@@ -350,6 +351,10 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
 
   return (
     <div className="flex h-full flex-1 flex-col">
+      <MediaPlaybackPanel
+        messages={messages}
+        onJumpToMessage={(id) => void handleJumpToMessage(id)}
+      />
       <div className="flex items-center gap-2 border-b border-border bg-surface px-3 py-3 md:px-4">
         {onBack && (
           <button
