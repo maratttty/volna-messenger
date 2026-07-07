@@ -4,7 +4,6 @@ import { Play, Pause } from 'lucide-react';
 interface AudioPlayerProps {
   src: string;
   duration?: number;
-  mimeType?: string;
 }
 
 const BAR_COUNT = 28;
@@ -29,11 +28,10 @@ function generateBarHeights(seed: string): number[] {
   return heights;
 }
 
-export function AudioPlayer({ src, duration, mimeType }: AudioPlayerProps) {
+export function AudioPlayer({ src, duration }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [unsupported, setUnsupported] = useState(false);
   const barHeights = useMemo(() => generateBarHeights(src), [src]);
 
   useEffect(() => {
@@ -43,12 +41,9 @@ export function AudioPlayer({ src, duration, mimeType }: AudioPlayerProps) {
       setPlaying(false);
       setCurrentTime(0);
     };
-    const onError = () => setUnsupported(true);
     audio.addEventListener('ended', onEnded);
-    audio.addEventListener('error', onError);
     return () => {
       audio.removeEventListener('ended', onEnded);
-      audio.removeEventListener('error', onError);
     };
   }, []);
 
@@ -83,19 +78,9 @@ export function AudioPlayer({ src, duration, mimeType }: AudioPlayerProps) {
   const progress = effectiveDuration > 0 ? currentTime / effectiveDuration : 0;
   const exactBarIndex = progress * BAR_COUNT;
 
-  if (unsupported) {
-    return (
-      <div className="flex w-56 items-center gap-2 py-1 text-xs text-text-muted">
-        🎤 Голосовое (формат не поддерживается браузером)
-      </div>
-    );
-  }
-
   return (
     <div className="flex w-56 items-center gap-2 py-1">
-      <audio ref={audioRef} preload="metadata">
-        <source src={src} type={mimeType ?? undefined} />
-      </audio>
+      <audio ref={audioRef} src={src} preload="metadata" />
       <button
         onClick={toggle}
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-bg"

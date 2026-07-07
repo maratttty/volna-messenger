@@ -77,7 +77,6 @@ function MessageContent({ message }: { message: Message }) {
         <AudioPlayer
           src={message.attachment_url ?? ''}
           duration={message.attachment_meta?.duration}
-          mimeType={message.attachment_meta?.mime}
         />
       );
 
@@ -86,7 +85,6 @@ function MessageContent({ message }: { message: Message }) {
         <VideoNotePlayer
           src={message.attachment_url ?? ''}
           durationSeconds={message.attachment_meta?.duration}
-          mimeType={message.attachment_meta?.mime}
         />
       );
 
