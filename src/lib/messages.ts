@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Message, MessageStatusValue, MessageType } from '../types/database';
+import type { Message, MessageStatusValue, MessageType, PinEntry } from '../types/database';
 import { MAX_MESSAGE_LENGTH } from '../config';
 import type { UploadResult } from './storage';
 
@@ -300,36 +300,56 @@ export async function markMessageDelivered(messageId: string, userId: string): P
     );
 }
 
-// ── Pinned messages (multi-pin per chat) ─────────────────────────────────────
+// ── Pins (personal = только у себя, shared = у всех в чате) ─────────────────
 
-export async function pinMessageMulti(chatId: string, messageId: string): Promise<void> {
-  const { error } = await supabase.rpc('pin_message_multi', { p_chat_id: chatId, p_message_id: messageId });
+export async function pinMessage(chatId: string, messageId: string, isPersonal: boolean): Promise<void> {
+  const { error } = await supabase.rpc('pin_message', {
+    p_chat_id: chatId,
+    p_message_id: messageId,
+    p_is_personal: isPersonal,
+  });
   if (error) throw error;
 }
 
-export async function unpinMessageMulti(chatId: string, messageId: string): Promise<void> {
-  const { error } = await supabase.rpc('unpin_message_multi', { p_chat_id: chatId, p_message_id: messageId });
+export async function unpinMessage(chatId: string, messageId: string, isPersonal: boolean): Promise<void> {
+  const { error } = await supabase.rpc('unpin_message', {
+    p_chat_id: chatId,
+    p_message_id: messageId,
+    p_is_personal: isPersonal,
+  });
   if (error) throw error;
 }
 
-export async function fetchPinnedMessages(chatId: string): Promise<Message[]> {
-  const { data: pins, error: pinError } = await supabase
-    .from('pinned_messages')
-    .select('message_id, pinned_at')
+export async function fetchPins(chatId: string): Promise<PinEntry[]> {
+  const { data: pinRows, error: pinError } = await supabase
+    .from('pins')
+    .select('message_id, pinned_by, pinned_at, is_personal')
     .eq('chat_id', chatId)
     .order('pinned_at', { ascending: true });
   if (pinError) throw pinError;
-  if (!pins || pins.length === 0) return [];
+  if (!pinRows || pinRows.length === 0) return [];
 
-  const messageIds = (pins as { message_id: string; pinned_at: string }[]).map((p) => p.message_id);
+  type PinRow = { message_id: string; pinned_by: string; pinned_at: string; is_personal: boolean };
+  const rows = pinRows as PinRow[];
+
+  const messageIds = [...new Set(rows.map((r) => r.message_id))];
   const { data: msgs, error: msgError } = await supabase
     .from('messages')
     .select('*')
     .in('id', messageIds);
   if (msgError) throw msgError;
 
-  const order = new Map(messageIds.map((id, i) => [id, i]));
-  return ((msgs ?? []) as Message[]).sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+  const msgMap = new Map(((msgs ?? []) as Message[]).map((m) => [m.id, m]));
+
+  return rows
+    .filter((r) => msgMap.has(r.message_id))
+    .map((r) => ({
+      messageId: r.message_id,
+      message: msgMap.get(r.message_id)!,
+      isPersonal: r.is_personal,
+      pinnedBy: r.pinned_by,
+      pinnedAt: r.pinned_at,
+    }));
 }
 
 // Status map for messages sent by the current user (id -> best status across recipients)

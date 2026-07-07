@@ -64,6 +64,14 @@ export interface Message {
   deleted: boolean;
 }
 
+export interface PinEntry {
+  messageId: string;
+  message: Message;
+  isPersonal: boolean;
+  pinnedBy: string;
+  pinnedAt: string;
+}
+
 export interface Invite {
   id: string;
   chat_id: string;

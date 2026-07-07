@@ -157,27 +157,42 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
   const [membersOpen, setMembersOpen] = useState(false);
   const [pinnedIndex, setPinnedIndex] = useState(0);
 
-  const { pinnedMessages, pinMessage: doPinMessage, unpinMessage: doUnpinMessage } = usePinnedMessages(chat.id);
+  const { pins, pinMessage: doPinMessage, unpinMessage: doUnpinMessage } = usePinnedMessages(chat.id);
+  const pinnedMessages = pins.map((p) => p.message);
+  const canPinForAll = chat.type === 'direct' || chat.myRole === 'owner' || chat.myRole === 'admin';
+  const [scopePending, setScopePending] = useState<Message | null>(null);
 
   // Reset cycling index whenever the pinned list changes
   useEffect(() => {
     setPinnedIndex(0);
-  }, [pinnedMessages.length]);
+  }, [pins.length]);
 
   async function handleTogglePin(message: Message) {
-    const isCurrentlyPinned = pinnedMessages.some((m) => m.id === message.id);
-    if (isCurrentlyPinned) {
-      await doUnpinMessage(message.id);
+    const sharedPin = pins.find((p) => p.messageId === message.id && !p.isPersonal);
+    const personalPin = pins.find((p) => p.messageId === message.id && p.isPersonal && p.pinnedBy === currentUserId);
+
+    if (sharedPin || personalPin) {
+      // Unpin: prefer shared if user has permission, else personal
+      if (sharedPin && canPinForAll) {
+        await doUnpinMessage(message.id, false);
+      } else if (personalPin) {
+        await doUnpinMessage(message.id, true);
+      }
     } else {
-      await doPinMessage(message.id);
+      // Pin: show scope dialog if user can pin for all, else pin personally
+      if (canPinForAll) {
+        setScopePending(message);
+      } else {
+        await doPinMessage(message.id, true);
+      }
     }
   }
 
   function handleBannerClick() {
-    if (pinnedMessages.length === 0) return;
-    const current = pinnedMessages[pinnedIndex];
-    void handleJumpToMessage(current.id);
-    setPinnedIndex((i) => (i + 1) % pinnedMessages.length);
+    if (pins.length === 0) return;
+    const current = pins[pinnedIndex];
+    void handleJumpToMessage(current.messageId);
+    setPinnedIndex((i) => (i + 1) % pins.length);
   }
 
   const refreshMembers = useCallback(async () => {
@@ -375,7 +390,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
         </button>
       </div>
 
-      {pinnedMessages.length > 0 && (
+      {pins.length > 0 && (
         <div className="flex w-full items-center gap-2 border-b border-border bg-surface px-4 py-2">
           <button
             onClick={handleBannerClick}
@@ -384,18 +399,18 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
             <Pin size={14} className="shrink-0 text-accent" />
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium text-accent">
-                Закреплённое сообщение
-                {pinnedMessages.length > 1 && (
-                  <span className="ml-1 opacity-60">{pinnedIndex + 1}/{pinnedMessages.length}</span>
+                {pins[pinnedIndex]?.isPersonal ? 'Закреплено у себя' : 'Закреплённое сообщение'}
+                {pins.length > 1 && (
+                  <span className="ml-1 opacity-60">{pinnedIndex + 1}/{pins.length}</span>
                 )}
               </p>
               <p className="truncate text-xs text-text-muted">
-                {pinnedPreviewText(pinnedMessages[pinnedIndex])}
+                {pinnedMessages[pinnedIndex] && pinnedPreviewText(pinnedMessages[pinnedIndex])}
               </p>
             </div>
           </button>
           <button
-            onClick={() => void handleTogglePin(pinnedMessages[pinnedIndex])}
+            onClick={() => pinnedMessages[pinnedIndex] && void handleTogglePin(pinnedMessages[pinnedIndex])}
             title="Открепить"
             className="shrink-0 rounded-md p-1 text-text-muted transition hover:bg-surface-hover hover:text-text"
           >
@@ -435,7 +450,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
           onForward={setForwardTarget}
           onJumpToMessage={(messageId) => void handleJumpToMessage(messageId)}
           onToggleReaction={(messageId, emoji) => void toggleReaction(messageId, emoji)}
-          pinnedMessageIds={new Set(pinnedMessages.map((m) => m.id))}
+          pinnedMessageIds={new Set(pins.map((p) => p.messageId))}
           onTogglePin={(message) => void handleTogglePin(message)}
           highlightMessageId={highlightMessageId}
           fetchDone={fetchDone}
@@ -471,6 +486,41 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
           onDeleteForEveryone={() => void handleDeleteForEveryone()}
           onClose={() => setDeleteTarget(null)}
         />
+      )}
+
+      {scopePending && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4"
+          onClick={() => setScopePending(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-surface p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-1 text-center text-sm font-semibold">Закрепить сообщение</p>
+            <p className="mb-4 text-center text-xs text-text-muted">Выберите, кто увидит закреплённое</p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => { void doPinMessage(scopePending.id, false); setScopePending(null); }}
+                className="rounded-xl bg-accent py-3 text-sm font-medium text-bg"
+              >
+                У всех
+              </button>
+              <button
+                onClick={() => { void doPinMessage(scopePending.id, true); setScopePending(null); }}
+                className="rounded-xl bg-surface-hover py-3 text-sm font-medium"
+              >
+                Только у себя
+              </button>
+              <button
+                onClick={() => setScopePending(null)}
+                className="py-2 text-sm text-text-muted"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {forwardTarget && (
