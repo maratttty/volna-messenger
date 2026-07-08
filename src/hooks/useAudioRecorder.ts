@@ -90,7 +90,7 @@ export function useAudioRecorder() {
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
     recorderRef.current = recorder;
-    recorder.start();
+    recorder.start(1000);
     startingRef.current = false;
 
     startTimeRef.current = Date.now();

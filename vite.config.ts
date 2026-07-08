@@ -52,16 +52,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/rest\//, /^\/auth\//, /^\/storage\//],
-        runtimeCaching: [
-          {
-            urlPattern: /supabase\.co\/storage\//,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'supabase-storage',
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 },
-            },
-          },
-        ],
+        // Supabase Storage (audio/video) intentionally NOT cached:
+        // CacheFirst breaks Safari iOS HTTP range requests → 30-second playback delay.
+        // Media files have their own CDN caching at the Supabase level.
       },
     }),
   ],
