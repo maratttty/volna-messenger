@@ -87,6 +87,17 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName }:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Reset muted when deactivated so next tap re-enters activate() ──
+  const wasActiveRef = useRef(false);
+  useEffect(() => {
+    if (wasActiveRef.current && !isActive) {
+      setLocalMuted(true);
+      const v = videoRef.current;
+      if (v) v.muted = true;
+    }
+    wasActiveRef.current = isActive;
+  }, [isActive]);
+
   // ── Deactivate store on unmount if active ──────────────────────
   useEffect(() => {
     return () => {
