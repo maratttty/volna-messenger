@@ -5,8 +5,8 @@
   <script>
     var l = window.location;
     l.replace(
-      l.protocol + '//' + l.host + '/volna-messenger/' +
-      '?p=' + encodeURIComponent(l.pathname.slice('/volna-messenger/'.length) + l.search) +
+      l.protocol + '//' + l.host + '/' +
+      '?p=' + encodeURIComponent(l.pathname.slice(1) + l.search) +
       l.hash
     );
   </script>

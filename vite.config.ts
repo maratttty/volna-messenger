@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  base: '/volna-messenger/',
+  base: '/',
   plugins: [
     react(),
     tailwindcss(),
@@ -19,27 +19,27 @@ export default defineConfig({
         background_color: '#f5f8fa',
         display: 'standalone',
         orientation: 'portrait',
-        scope: '/volna-messenger/',
-        start_url: '/volna-messenger/',
+        scope: '/',
+        start_url: '/',
         icons: [
           {
-            src: '/volna-messenger/pwa-192x192.png',
+            src: '/pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: '/volna-messenger/pwa-512x512.png',
+            src: '/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
           },
           {
-            src: '/volna-messenger/pwa-maskable-192x192.png',
+            src: '/pwa-maskable-192x192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'maskable',
           },
           {
-            src: '/volna-messenger/pwa-maskable-512x512.png',
+            src: '/pwa-maskable-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
@@ -49,14 +49,11 @@ export default defineConfig({
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
-        // Cache app shell and static assets
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        // Don't cache Supabase API calls — always fetch fresh
-        navigateFallback: '/volna-messenger/index.html',
+        navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/rest\//, /^\/auth\//, /^\/storage\//],
         runtimeCaching: [
           {
-            // Images from Supabase Storage — cache for 7 days
             urlPattern: /supabase\.co\/storage\//,
             handler: 'CacheFirst',
             options: {
