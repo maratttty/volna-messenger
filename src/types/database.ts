@@ -55,6 +55,7 @@ export interface Message {
     duration?: number; // seconds, for voice/video_note
     width?: number;
     height?: number;
+    posterUrl?: string; // video_note first-frame thumbnail, captured client-side at record time
   } | null;
   reply_to_id: string | null;
   forwarded_from_id: string | null;

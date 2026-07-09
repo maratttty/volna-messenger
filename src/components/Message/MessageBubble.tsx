@@ -1,9 +1,11 @@
 import { useRef } from 'react';
 import { Paperclip, Reply, Pencil, Trash2, Forward, Pin, PinOff, Copy, Check, CheckCheck } from 'lucide-react';
 import type { Message, MessageStatusValue, ReactionSummary } from '../../types/database';
+import type { MediaUploadState } from '../../hooks/useMessages';
 import { formatMessageTime } from '../../lib/time';
 import { AudioPlayer } from './AudioPlayer';
 import { VideoNotePlayer } from './VideoNotePlayer';
+import { MediaUploadOverlay } from './MediaUploadOverlay';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu';
 
@@ -18,6 +20,7 @@ interface MessageBubbleProps {
   repliedSenderName?: string;
   reactions?: ReactionSummary[];
   isPinned: boolean;
+  uploadState?: MediaUploadState;
   onReply: (message: Message) => void;
   onEdit: (message: Message) => void;
   onDelete: (message: Message) => void;
@@ -39,14 +42,31 @@ function formatBytes(size?: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
-function MessageContent({ message, senderName }: { message: Message; senderName?: string }) {
+function MessageContent({
+  message,
+  senderName,
+  uploadState,
+}: {
+  message: Message;
+  senderName?: string;
+  uploadState?: MediaUploadState;
+}) {
   if (message.deleted) {
     return <p className="text-sm italic text-text-muted">Сообщение удалено</p>;
   }
 
   switch (message.type) {
     case 'image':
-      return (
+      return uploadState ? (
+        <div className="relative">
+          <img
+            src={message.attachment_url ?? ''}
+            alt={message.attachment_meta?.name ?? 'изображение'}
+            className="max-h-72 max-w-full rounded-lg object-cover"
+          />
+          <MediaUploadOverlay upload={uploadState} />
+        </div>
+      ) : (
         <a href={message.attachment_url ?? '#'} target="_blank" rel="noopener noreferrer">
           <img
             src={message.attachment_url ?? ''}
@@ -56,21 +76,32 @@ function MessageContent({ message, senderName }: { message: Message; senderName?
         </a>
       );
 
-    case 'file':
-      return (
+    case 'file': {
+      const inner = (
+        <>
+          <Paperclip size={20} className="shrink-0" />
+          <div className="min-w-0">
+            <p className="truncate text-sm">{message.attachment_meta?.name ?? 'Файл'}</p>
+            <p className="text-xs text-text-muted">{formatBytes(message.attachment_meta?.size)}</p>
+          </div>
+        </>
+      );
+      return uploadState ? (
+        <div className="relative flex items-center gap-2 rounded-lg bg-black/10 px-2 py-2">
+          {inner}
+          <MediaUploadOverlay upload={uploadState} />
+        </div>
+      ) : (
         <a
           href={message.attachment_url ?? '#'}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-2 rounded-lg bg-black/10 px-2 py-2 hover:bg-black/20"
         >
-          <Paperclip size={20} className="shrink-0" />
-          <div className="min-w-0">
-            <p className="truncate text-sm">{message.attachment_meta?.name ?? 'Файл'}</p>
-            <p className="text-xs text-text-muted">{formatBytes(message.attachment_meta?.size)}</p>
-          </div>
+          {inner}
         </a>
       );
+    }
 
     case 'voice':
       return (
@@ -79,6 +110,7 @@ function MessageContent({ message, senderName }: { message: Message; senderName?
           duration={message.attachment_meta?.duration}
           messageId={message.id}
           senderName={senderName ?? ''}
+          uploadState={uploadState}
         />
       );
 
@@ -89,6 +121,8 @@ function MessageContent({ message, senderName }: { message: Message; senderName?
           durationSeconds={message.attachment_meta?.duration}
           messageId={message.id}
           senderName={senderName ?? ''}
+          posterUrl={message.attachment_meta?.posterUrl}
+          uploadState={uploadState}
         />
       );
 
@@ -123,6 +157,7 @@ export function MessageBubble({
   repliedSenderName,
   reactions,
   isPinned,
+  uploadState,
   onReply,
   onEdit,
   onDelete,
@@ -143,6 +178,10 @@ export function MessageBubble({
   }
 
   const isPending = message.id.startsWith('pending-');
+  // Media with active upload tracking shows its own progress/error overlay
+  // instead of the generic faded "pending" look — no more ambiguous "shadow
+  // mode" where it's unclear whether anything is happening.
+  const dimPending = isPending && !uploadState;
   const isVideoNote = message.type === 'video_note';
   const canEdit = isOwn && message.type === 'text' && !message.deleted;
   const canCopy = message.type === 'text' && !message.deleted && !!message.content;
@@ -168,8 +207,8 @@ export function MessageBubble({
         {...(canActOn ? menu.triggerProps : {})}
         className={
           isVideoNote
-            ? `select-none flex flex-col items-${isOwn ? 'end' : 'start'} ${isPending ? 'opacity-60' : ''}`
-            : `select-none max-w-[75%] rounded-2xl px-3 py-2 ${isOwn ? 'bg-bubble-out text-text' : 'bg-bubble-in text-text'} ${isPending ? 'opacity-60' : ''}`
+            ? `select-none flex flex-col items-${isOwn ? 'end' : 'start'} ${dimPending ? 'opacity-60' : ''}`
+            : `select-none max-w-[75%] rounded-2xl px-3 py-2 ${isOwn ? 'bg-bubble-out text-text' : 'bg-bubble-in text-text'} ${dimPending ? 'opacity-60' : ''}`
         }
       >
         {message.forwarded_from_name && (
@@ -192,7 +231,7 @@ export function MessageBubble({
             <p className="truncate text-xs text-text-muted">{repliedPreviewText(repliedMessage)}</p>
           </button>
         )}
-        <MessageContent message={message} senderName={senderName} />
+        <MessageContent message={message} senderName={senderName} uploadState={uploadState} />
         {reactions && reactions.length > 0 && (
           <div className={`mt-1 flex flex-wrap gap-1 ${isVideoNote ? 'px-1' : ''}`}>
             {reactions.map((r) => (

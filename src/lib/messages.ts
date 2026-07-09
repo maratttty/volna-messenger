@@ -135,6 +135,7 @@ export async function sendAttachmentMessage(params: {
   type: MessageType;
   upload: UploadResult;
   duration?: number;
+  posterUrl?: string;
   replyToId?: string | null;
 }): Promise<Message> {
   const { data, error } = await supabase
@@ -150,6 +151,7 @@ export async function sendAttachmentMessage(params: {
         size: params.upload.size,
         mime: params.upload.mime,
         duration: params.duration,
+        posterUrl: params.posterUrl,
       },
       client_id: params.clientId,
       reply_to_id: params.replyToId ?? null,

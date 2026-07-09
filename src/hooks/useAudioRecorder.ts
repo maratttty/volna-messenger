@@ -20,6 +20,11 @@ function pickMimeType(): string {
   return '';
 }
 
+// Voice is intelligible speech, not music — 32kbps mono is plenty (this is
+// roughly what WhatsApp-style voice notes use) and cuts upload size/time by
+// several times versus the browser's unspecified default bitrate.
+const VOICE_BITRATE_BPS = 32_000;
+
 export interface RecordedAudio {
   blob: Blob;
   durationSeconds: number;
@@ -85,7 +90,9 @@ export function useAudioRecorder() {
     setStream(mediaStream);
 
     const mimeType = pickMimeType();
-    const recorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : undefined);
+    const recorderOptions: MediaRecorderOptions = { audioBitsPerSecond: VOICE_BITRATE_BPS };
+    if (mimeType) recorderOptions.mimeType = mimeType;
+    const recorder = new MediaRecorder(mediaStream, recorderOptions);
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
