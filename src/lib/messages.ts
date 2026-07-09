@@ -61,21 +61,22 @@ export async function fetchMessages(
   return { messages: page.reverse() as Message[], hasMore };
 }
 
-// Full-text search within one chat, using the generated search_vector column
-// (russian to_tsvector). websearch_to_tsquery tolerates natural typed input
-// (quotes, "-exclude", etc.) better than a raw plainto_tsquery.
+// Substring search within one chat. Case-insensitive, matches partial words
+// (unlike full-text search, which only matches whole lexemes/stems) — needed
+// for search-as-you-type where the user hasn't finished typing a word yet.
 export async function searchMessagesInChat(chatId: string, userId: string, query: string): Promise<Message[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
 
   const hiddenIds = await fetchHiddenMessageIds(chatId, userId);
+  const escaped = trimmed.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 
   let q = supabase
     .from('messages')
     .select('*')
     .eq('chat_id', chatId)
     .eq('deleted', false)
-    .textSearch('search_vector', trimmed, { type: 'websearch', config: 'russian' })
+    .ilike('content', `%${escaped}%`)
     .order('created_at', { ascending: false })
     .limit(50);
 

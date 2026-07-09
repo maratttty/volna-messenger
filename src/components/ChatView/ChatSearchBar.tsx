@@ -37,7 +37,7 @@ export function ChatSearchBar({ chatId, currentUserId, onJumpTo, onClose }: Chat
     inputRef.current?.focus();
   }, []);
 
-  // Debounced search-as-you-type against the server-side search_vector index.
+  // Debounced search-as-you-type, substring match against message content.
   useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed) {
@@ -50,7 +50,11 @@ export function ChatSearchBar({ chatId, currentUserId, onJumpTo, onClose }: Chat
     const timer = setTimeout(() => {
       searchMessagesInChat(chatId, currentUserId, trimmed)
         .then((found) => !cancelled && setResults(found))
-        .catch(() => !cancelled && setResults([]))
+        .catch((err) => {
+          if (cancelled) return;
+          console.error('Ошибка поиска по чату:', err);
+          setResults([]);
+        })
         .finally(() => !cancelled && setLoading(false));
     }, 300);
     return () => {
