@@ -29,6 +29,19 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
   const [viewed,      setViewed]   = useState(false);
   const [currentTime, setCurrent]  = useState(0);
   const [duration,    setDuration] = useState(durationSeconds ?? 0);
+  // True once the video has an actual decoded frame to show. Browsers hide
+  // the native `poster` attribute as soon as play() is *called*, even before
+  // any frame data has arrived — autoplay-on-mount then races the network
+  // and paints black until data catches up. We render our own poster <img>
+  // on top and only drop it once a real frame is confirmed, so there's never
+  // a black gap regardless of that native timing quirk.
+  const [frameReady,  setFrameReady] = useState(false);
+
+  // A different src (pending blob URL → confirmed server URL) means a fresh
+  // video load — reset so the poster covers the new buffering gap too.
+  useEffect(() => {
+    setFrameReady(false);
+  }, [src]);
 
   const isActive   = usePlaybackStore(s => s.messageId === messageId);
   const isPending  = usePlaybackStore(s => s.pendingPlay === messageId);
@@ -60,6 +73,7 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
     if (!v) return;
 
     const onMeta  = () => { if (Number.isFinite(v.duration)) setDuration(v.duration); };
+    const onFrame = () => setFrameReady(true);
     const onEnded = () => {
       setPlaying(false);
       setCurrent(0);
@@ -76,11 +90,15 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
     };
 
     v.addEventListener('loadedmetadata', onMeta);
+    v.addEventListener('loadeddata', onFrame);
+    v.addEventListener('playing', onFrame);
     v.addEventListener('ended',  onEnded);
     v.addEventListener('pause',  onPause);
     v.addEventListener('play',   onPlay);
     return () => {
       v.removeEventListener('loadedmetadata', onMeta);
+      v.removeEventListener('loadeddata', onFrame);
+      v.removeEventListener('playing', onFrame);
       v.removeEventListener('ended',  onEnded);
       v.removeEventListener('pause',  onPause);
       v.removeEventListener('play',   onPlay);
@@ -202,6 +220,17 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
           playsInline
           preload="metadata"
         />
+
+        {/* Own poster overlay — covers the native black-before-first-frame gap
+            that the `poster` attribute above doesn't reliably cover once
+            play() has been called (autoplay-on-visible fires immediately). */}
+        {!frameReady && posterUrl && (
+          <img
+            src={posterUrl}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
 
         {/* Play overlay — shown when paused/idle */}
         {!playing && (
