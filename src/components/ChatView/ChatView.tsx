@@ -13,6 +13,7 @@ import { forwardMessage } from '../../lib/messages';
 import { fetchChatMembers } from '../../lib/chats';
 import { formatLastSeen } from '../../lib/time';
 import { playSendSound } from '../../lib/sound';
+import { captureFirstFrame } from '../../lib/videoFrame';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
@@ -302,7 +303,8 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, c
 
   async function handleSendVideoNote(blob: Blob, durationSeconds: number, mimeType: string) {
     const file = new File([blob], fileNameFromMime(mimeType, 'video_note'), { type: mimeType });
-    await sendAttachment(file, 'video_note', durationSeconds, replyTarget?.id ?? null);
+    const posterUrl = await captureFirstFrame(blob);
+    await sendAttachment(file, 'video_note', durationSeconds, replyTarget?.id ?? null, posterUrl ?? undefined);
     setReplyTarget(null);
   }
 

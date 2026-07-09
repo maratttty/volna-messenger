@@ -89,6 +89,7 @@ function MessageContent({ message, senderName }: { message: Message; senderName?
           durationSeconds={message.attachment_meta?.duration}
           messageId={message.id}
           senderName={senderName ?? ''}
+          posterUrl={message.attachment_meta?.posterUrl}
         />
       );
 

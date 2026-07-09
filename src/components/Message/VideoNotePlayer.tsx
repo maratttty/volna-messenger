@@ -8,6 +8,7 @@ interface VideoNotePlayerProps {
   durationSeconds?: number;
   messageId: string;
   senderName: string;
+  posterUrl?: string;
 }
 
 const SIZE         = 200;
@@ -19,7 +20,7 @@ function fmt(s: number) {
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 }
 
-export function VideoNotePlayer({ src, durationSeconds, messageId, senderName }: VideoNotePlayerProps) {
+export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, posterUrl }: VideoNotePlayerProps) {
   const videoRef   = useRef<HTMLVideoElement>(null);
   const wrapperRef = useRef<HTMLButtonElement>(null);
 
@@ -196,6 +197,7 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName }:
         <video
           ref={videoRef}
           src={src}
+          poster={posterUrl}
           className="h-full w-full object-cover"
           playsInline
           preload="metadata"

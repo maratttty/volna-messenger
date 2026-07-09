@@ -268,7 +268,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
   );
 
   const sendAttachment = useCallback(
-    async (file: File, type: MessageType, duration?: number, replyToId?: string | null) => {
+    async (file: File, type: MessageType, duration?: number, replyToId?: string | null, posterUrl?: string) => {
       if (!chatId || !currentUserId) return;
       const clientId = crypto.randomUUID();
       const localUrl = URL.createObjectURL(file);
@@ -281,7 +281,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         type,
         content: null,
         attachment_url: localUrl,
-        attachment_meta: { name: file.name, size: file.size, mime: file.type, duration },
+        attachment_meta: { name: file.name, size: file.size, mime: file.type, duration, posterUrl },
         reply_to_id: replyToId ?? null,
         forwarded_from_id: null,
         forwarded_from_name: null,
@@ -300,6 +300,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
           type,
           upload: uploaded,
           duration,
+          posterUrl,
           replyToId,
         });
         useMessageStore.getState().confirmMessage(chatId, clientId, confirmed);
