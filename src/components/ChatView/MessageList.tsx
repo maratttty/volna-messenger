@@ -3,14 +3,12 @@ import { ChevronDown } from 'lucide-react';
 import { MessageBubble } from '../Message/MessageBubble';
 import { Spinner } from '../ui/Spinner';
 import type { Message, MessageStatusValue, ReactionSummary } from '../../types/database';
-import type { MediaUploadState } from '../../hooks/useMessages';
 
 interface MessageListProps {
   messages: Message[];
   currentUserId: string;
   statuses: Map<string, MessageStatusValue>;
   reactions: Map<string, ReactionSummary[]>;
-  uploads: Map<string, MediaUploadState>;
   hasMore: boolean;
   loadingMore: boolean;
   loading: boolean;
@@ -38,7 +36,6 @@ export function MessageList({
   currentUserId,
   statuses,
   reactions,
-  uploads,
   hasMore,
   loadingMore,
   loading,
@@ -299,7 +296,6 @@ export function MessageList({
                   repliedSenderName={repliedMessage ? resolveSenderName(repliedMessage.sender_id) : undefined}
                   reactions={reactions.get(msg.id)}
                   isPinned={pinnedMessageIds.has(msg.id)}
-                  uploadState={msg.client_id ? uploads.get(msg.client_id) : undefined}
                   onReply={onReply}
                   onEdit={onEdit}
                   onDelete={onDelete}

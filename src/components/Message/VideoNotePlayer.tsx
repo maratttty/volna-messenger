@@ -1,16 +1,13 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Play, Volume2, Eye, AlertCircle } from 'lucide-react';
+import { Play, Volume2, Eye } from 'lucide-react';
 import { CircularProgressRing } from '../ui/CircularProgressRing';
 import { usePlaybackStore } from '../../stores/playbackStore';
-import type { MediaUploadState } from '../../hooks/useMessages';
 
 interface VideoNotePlayerProps {
   src: string;
   durationSeconds?: number;
   messageId: string;
   senderName: string;
-  posterUrl?: string;
-  uploadState?: MediaUploadState;
 }
 
 const SIZE         = 200;
@@ -22,7 +19,7 @@ function fmt(s: number) {
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 }
 
-export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, posterUrl, uploadState }: VideoNotePlayerProps) {
+export function VideoNotePlayer({ src, durationSeconds, messageId, senderName }: VideoNotePlayerProps) {
   const videoRef   = useRef<HTMLVideoElement>(null);
   const wrapperRef = useRef<HTMLButtonElement>(null);
 
@@ -153,10 +150,6 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
 
   // ── Tap handler ─────────────────────────────────────────────────
   const handleTap = useCallback(() => {
-    if (uploadState) {
-      if (uploadState.status === 'error') uploadState.retry();
-      return;
-    }
     const v = videoRef.current;
     if (!v) return;
 
@@ -172,7 +165,7 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
     } else {
       v.play().catch(() => {});
     }
-  }, [playing, activate, messageId, senderName, uploadState]);
+  }, [playing, activate, messageId, senderName]);
 
   const progress  = duration > 0 ? currentTime / duration : 0;
   const remaining = Math.max(0, duration - currentTime);
@@ -185,24 +178,14 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
       style={{ width: OUTER, height: OUTER }}
       aria-label="Видео-сообщение"
     >
-      {/* Circular progress ring — upload progress while sending, else playback progress when playing with sound */}
-      {uploadState?.status === 'uploading' ? (
+      {/* Circular progress ring — only when playing with sound */}
+      {!effectiveMuted && (
         <CircularProgressRing
-          progress={uploadState.progress}
+          progress={progress}
           size={OUTER}
           strokeWidth={3}
-          className="text-accent"
-          trackClassName="text-white/25"
+          className="text-accent/70"
         />
-      ) : (
-        !effectiveMuted && !uploadState && (
-          <CircularProgressRing
-            progress={progress}
-            size={OUTER}
-            strokeWidth={3}
-            className="text-accent/70"
-          />
-        )
       )}
 
       {/* Video clipped to circle */}
@@ -213,7 +196,6 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
         <video
           ref={videoRef}
           src={src}
-          poster={posterUrl}
           className="h-full w-full object-cover"
           playsInline
           preload="metadata"
@@ -223,20 +205,10 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
         {!playing && (
           <span className="absolute inset-0 flex items-center justify-center bg-black/20 transition-opacity duration-150">
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/40">
-              {uploadState ? (
-                uploadState.status === 'error' ? (
-                  <span className="flex flex-col items-center gap-0.5 text-white drop-shadow">
-                    <AlertCircle size={18} />
-                    <span className="text-[9px] font-medium">Повторить</span>
-                  </span>
-                ) : (
-                  <span className="text-[11px] font-semibold text-white">{Math.round(uploadState.progress * 100)}%</span>
-                )
-              ) : effectiveMuted ? (
-                <Volume2 size={22} className="text-white drop-shadow" />
-              ) : (
-                <Play size={22} className="fill-white text-white drop-shadow" />
-              )}
+              {effectiveMuted
+                ? <Volume2 size={22} className="text-white drop-shadow" />
+                : <Play    size={22} className="fill-white text-white drop-shadow" />
+              }
             </span>
           </span>
         )}

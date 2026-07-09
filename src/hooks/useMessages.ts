@@ -13,22 +13,13 @@ import {
   updateReadCursor,
   fetchOwnMessageStatuses,
 } from '../lib/messages';
-import { uploadAttachment, validateAttachment } from '../lib/storage';
+import { uploadAttachment } from '../lib/storage';
 import { onNetworkRecovery } from '../lib/network';
 import { playSendSound, playReceiveSound } from '../lib/sound';
 import { fetchReactions, groupReactions, setReaction, removeReaction } from '../lib/reactions';
 import { useMessageStore } from '../store/message-store';
 import { useChatStore } from '../store/chat-store';
 import type { Message, MessageStatusValue, MessageType, ReactionSummary } from '../types/database';
-
-// Client-only upload state for a pending media message, keyed by client_id
-// (stable across the pending-id → real-id swap on confirm). Not persisted —
-// purely drives the progress/error UI on the bubble.
-export interface MediaUploadState {
-  status: 'uploading' | 'error';
-  progress: number; // 0..1, meaningful only while status === 'uploading'
-  retry: () => void;
-}
 
 export function useMessages(chatId: string | null, currentUserId: string | undefined, hiddenBeforeAt?: string | null) {
   const { messages, hasMore, setMessages, prependMessages, appendMessage, updateMessage, removeMessage } =
@@ -40,7 +31,6 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
   const [fetchDone, setFetchDone] = useState(false);
   const [statuses, setStatuses] = useState<Map<string, MessageStatusValue>>(new Map());
   const [reactions, setReactions] = useState<Map<string, ReactionSummary[]>>(new Map());
-  const [uploads, setUploads] = useState<Map<string, MediaUploadState>>(new Map());
 
   const refreshStatuses = useCallback(async (msgs: Message[]) => {
     if (!currentUserId) return;
@@ -277,19 +267,9 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     [chatId, currentUserId, appendMessage],
   );
 
-  // Media send: appends the optimistic bubble once, then attempt() does the
-  // upload + insert and is itself stashed as the retry callback on failure —
-  // tapping "Повторить" re-runs the exact same closure instead of re-sending
-  // from scratch. Deliberately never throws/removes the optimistic message on
-  // failure: the error is surfaced via `uploads` (bubble shows an error icon
-  // + retry), not by making the message vanish or reject silently.
   const sendAttachment = useCallback(
-    async (file: File, type: MessageType, duration?: number, replyToId?: string | null, posterUrl?: string) => {
+    async (file: File, type: MessageType, duration?: number, replyToId?: string | null) => {
       if (!chatId || !currentUserId) return;
-      // Fails fast, before any optimistic bubble exists — a file that's too
-      // big or a blocked type won't succeed on retry, so this should surface
-      // as the plain error banner in MessageInput, not a stuck bubble.
-      validateAttachment(file);
       const clientId = crypto.randomUUID();
       const localUrl = URL.createObjectURL(file);
 
@@ -301,7 +281,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         type,
         content: null,
         attachment_url: localUrl,
-        attachment_meta: { name: file.name, size: file.size, mime: file.type, duration, posterUrl },
+        attachment_meta: { name: file.name, size: file.size, mime: file.type, duration },
         reply_to_id: replyToId ?? null,
         forwarded_from_id: null,
         forwarded_from_name: null,
@@ -311,42 +291,25 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       };
       appendMessage(chatId, optimistic);
 
-      const attempt = async () => {
-        setUploads((prev) => new Map(prev).set(clientId, { status: 'uploading', progress: 0, retry: attempt }));
-
-        try {
-          const uploaded = await uploadAttachment('attachments', currentUserId, file, (fraction) => {
-            setUploads((prev) => {
-              const current = prev.get(clientId);
-              if (!current || current.status !== 'uploading') return prev;
-              return new Map(prev).set(clientId, { ...current, progress: fraction });
-            });
-          });
-          const confirmed = await sendAttachmentMessage({
-            chatId,
-            senderId: currentUserId,
-            clientId,
-            type,
-            upload: uploaded,
-            duration,
-            posterUrl,
-            replyToId,
-          });
-          useMessageStore.getState().confirmMessage(chatId, clientId, confirmed);
-          playSendSound();
-          setUploads((prev) => {
-            if (!prev.has(clientId)) return prev;
-            const next = new Map(prev);
-            next.delete(clientId);
-            return next;
-          });
-          URL.revokeObjectURL(localUrl);
-        } catch {
-          setUploads((prev) => new Map(prev).set(clientId, { status: 'error', progress: 0, retry: attempt }));
-        }
-      };
-
-      await attempt();
+      try {
+        const uploaded = await uploadAttachment('attachments', currentUserId, file);
+        const confirmed = await sendAttachmentMessage({
+          chatId,
+          senderId: currentUserId,
+          clientId,
+          type,
+          upload: uploaded,
+          duration,
+          replyToId,
+        });
+        useMessageStore.getState().confirmMessage(chatId, clientId, confirmed);
+        playSendSound();
+      } catch (err) {
+        useMessageStore.getState().removeMessage(chatId, optimistic.id);
+        throw err;
+      } finally {
+        URL.revokeObjectURL(localUrl);
+      }
     },
     [chatId, currentUserId, appendMessage],
   );
@@ -471,6 +434,5 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     statuses,
     reactions,
     toggleReaction,
-    uploads,
   };
 }

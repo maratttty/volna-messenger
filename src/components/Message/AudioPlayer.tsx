@@ -1,15 +1,12 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
-import { Play, Pause, AlertCircle } from 'lucide-react';
+import { Play, Pause } from 'lucide-react';
 import { usePlaybackStore } from '../../stores/playbackStore';
-import { CircularProgressRing } from '../ui/CircularProgressRing';
-import type { MediaUploadState } from '../../hooks/useMessages';
 
 interface AudioPlayerProps {
   src: string;
   duration?: number;
   messageId: string;
   senderName: string;
-  uploadState?: MediaUploadState;
 }
 
 const BAR_COUNT = 28;
@@ -31,7 +28,7 @@ function generateBarHeights(seed: string): number[] {
   return heights;
 }
 
-export function AudioPlayer({ src, duration, messageId, senderName, uploadState }: AudioPlayerProps) {
+export function AudioPlayer({ src, duration, messageId, senderName }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const barHeights = useMemo(() => generateBarHeights(src), [src]);
@@ -103,10 +100,6 @@ export function AudioPlayer({ src, duration, messageId, senderName, uploadState 
   }, [isActive, playing]);
 
   function toggle() {
-    if (uploadState) {
-      if (uploadState.status === 'error') uploadState.retry();
-      return;
-    }
     const audio = audioRef.current;
     if (!audio) return;
     if (isActive && playing) {
@@ -128,22 +121,9 @@ export function AudioPlayer({ src, duration, messageId, senderName, uploadState 
       <audio ref={audioRef} src={src} preload="metadata" />
       <button
         onClick={toggle}
-        className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-bg"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-bg"
       >
-        {uploadState ? (
-          uploadState.status === 'error' ? (
-            <AlertCircle size={16} />
-          ) : (
-            <>
-              <CircularProgressRing progress={uploadState.progress} size={36} strokeWidth={2.5} className="text-bg" trackClassName="text-bg/30" />
-              <span className="text-[9px] font-semibold">{Math.round(uploadState.progress * 100)}%</span>
-            </>
-          )
-        ) : playing ? (
-          <Pause size={16} />
-        ) : (
-          <Play size={16} />
-        )}
+        {playing ? <Pause size={16} /> : <Play size={16} />}
       </button>
       <div className="flex flex-1 items-end gap-[2px]">
         {barHeights.map((h, i) => {
