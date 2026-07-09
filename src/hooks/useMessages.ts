@@ -15,6 +15,7 @@ import {
 } from '../lib/messages';
 import { uploadAttachment } from '../lib/storage';
 import { onNetworkRecovery } from '../lib/network';
+import { playSendSound, playReceiveSound } from '../lib/sound';
 import { fetchReactions, groupReactions, setReaction, removeReaction } from '../lib/reactions';
 import { useMessageStore } from '../store/message-store';
 import { useChatStore } from '../store/chat-store';
@@ -124,6 +125,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
           const msg = payload.new as Message;
           appendMessage(chatId, msg);
           if (msg.sender_id !== currentUserId) {
+            playReceiveSound();
             void markMessageRead(msg.id, currentUserId);
             // Persist cursor to DB so fetchChats reports the right count on refresh
             if (chatId) void updateReadCursor(chatId, currentUserId, msg.id);
@@ -254,6 +256,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       try {
         const confirmed = await sendMessageApi({ chatId, senderId: currentUserId, content, clientId, replyToId });
         useMessageStore.getState().confirmMessage(chatId, clientId, confirmed);
+        playSendSound();
       } catch (err) {
         useMessageStore.getState().removeMessage(chatId, optimistic.id);
         throw err;
@@ -300,6 +303,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
           replyToId,
         });
         useMessageStore.getState().confirmMessage(chatId, clientId, confirmed);
+        playSendSound();
       } catch (err) {
         useMessageStore.getState().removeMessage(chatId, optimistic.id);
         throw err;
@@ -336,6 +340,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       try {
         const confirmed = await sendGifMessage({ chatId, senderId: currentUserId, clientId, gifUrl, title, replyToId });
         useMessageStore.getState().confirmMessage(chatId, clientId, confirmed);
+        playSendSound();
       } catch (err) {
         useMessageStore.getState().removeMessage(chatId, optimistic.id);
         throw err;

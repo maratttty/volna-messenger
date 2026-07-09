@@ -12,6 +12,7 @@ import { usePinnedMessages } from '../../hooks/usePinnedMessages';
 import { forwardMessage } from '../../lib/messages';
 import { fetchChatMembers } from '../../lib/chats';
 import { formatLastSeen } from '../../lib/time';
+import { playSendSound } from '../../lib/sound';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
@@ -26,6 +27,7 @@ interface ChatViewProps {
   chats: ChatWithMeta[];
   currentUserId: string;
   currentUserDisplayName: string;
+  currentUserAvatarUrl: string | null;
   onBack?: () => void;
 }
 
@@ -121,7 +123,7 @@ function pinnedPreviewText(message: Message): string {
   }
 }
 
-export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, onBack }: ChatViewProps) {
+export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, currentUserAvatarUrl, onBack }: ChatViewProps) {
   // Capture both the read cursor and the unread count at the moment the chat is
   // opened — before markChatRead resets them — so MessageList can scroll to the
   // first unread message and show the correct badge on the ↓ button.
@@ -257,6 +259,20 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
     return new Map(members.map((m) => [m.user_id, m.profile.display_name]));
   }, [chat.type, members]);
 
+  // Name + avatar per sender, for search results (which need both regardless
+  // of chat type, unlike senderNames above which is group-bubbles-only).
+  const senderInfo = useMemo(() => {
+    const map = new Map<string, { name: string; avatarUrl: string | null }>();
+    map.set(currentUserId, { name: currentUserDisplayName, avatarUrl: currentUserAvatarUrl });
+    if (chat.type === 'direct' && chat.otherUser) {
+      map.set(chat.otherUser.id, { name: chat.otherUser.display_name, avatarUrl: chat.otherUser.avatar_url });
+    }
+    for (const m of members) {
+      map.set(m.user_id, { name: m.profile.display_name, avatarUrl: m.profile.avatar_url });
+    }
+    return map;
+  }, [currentUserId, currentUserDisplayName, currentUserAvatarUrl, chat.type, chat.otherUser, members]);
+
   // Single place that knows how to turn a sender_id into a display name —
   // used for the reply-quote label, not the group "sender name above bubble"
   // line (that one stays group-only via senderNames, matching Telegram).
@@ -333,6 +349,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
       clientId: crypto.randomUUID(),
       originalSenderName,
     });
+    playSendSound();
     setForwardTarget(null);
   }
 
@@ -428,6 +445,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, o
         <ChatSearchBar
           chatId={chat.id}
           currentUserId={currentUserId}
+          senderInfo={senderInfo}
           onJumpTo={(message) => void handleJumpToMessage(message.id)}
           onClose={() => setSearchOpen(false)}
         />

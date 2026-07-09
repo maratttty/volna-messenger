@@ -43,3 +43,24 @@ export function formatLastSeen(lastSeenAt: string | undefined): string | null {
 export function formatMessageTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
+
+// Compact "date, time" for search results, where results can span many days
+// and both pieces of information matter (unlike the chat list's relative time).
+export function formatSearchResultTime(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+  if (date.toDateString() === now.toDateString()) return time;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return `вчера, ${time}`;
+
+  const sameYear = date.getFullYear() === now.getFullYear();
+  const datePart = date.toLocaleDateString(
+    'ru-RU',
+    sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' },
+  );
+  return `${datePart}, ${time}`;
+}

@@ -226,6 +226,7 @@ export default function ChatPage() {
           chats={chats}
           currentUserId={session.user.id}
           currentUserDisplayName={profile?.display_name ?? ''}
+          currentUserAvatarUrl={profile?.avatar_url ?? null}
           onBack={() => setActiveChatId(null)}
         />
         </div>

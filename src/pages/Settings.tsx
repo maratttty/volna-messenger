@@ -4,6 +4,7 @@ import { ArrowLeft, Camera } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { updateProfile, checkUsernameAvailable } from '../lib/auth';
 import { uploadAttachment } from '../lib/storage';
+import { isSoundEnabled, setSoundEnabled } from '../lib/sound';
 import { Avatar } from '../components/ui/Avatar';
 import { Spinner } from '../components/ui/Spinner';
 
@@ -19,6 +20,7 @@ export default function Settings() {
   const [bio, setBio] = useState(profile?.bio ?? '');
   const [showLastSeen, setShowLastSeen] = useState(profile?.show_last_seen ?? true);
   const [togglingLastSeen, setTogglingLastSeen] = useState(false);
+  const [soundsEnabled, setSoundsEnabled] = useState(isSoundEnabled());
   const [avatarPreview, setAvatarPreview] = useState<string | null>(profile?.avatar_url ?? null);
   const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
   const [usernameError, setUsernameError] = useState<string | null>(null);
@@ -56,6 +58,12 @@ export default function Settings() {
     }
     setUsernameError(null);
     return true;
+  }
+
+  function handleToggleSounds() {
+    const next = !soundsEnabled;
+    setSoundsEnabled(next);
+    setSoundEnabled(next);
   }
 
   async function handleToggleShowLastSeen() {
@@ -179,6 +187,22 @@ export default function Settings() {
             {saving && <Spinner className="h-4 w-4" />}
             {saving ? 'Сохраняем…' : 'Сохранить'}
           </button>
+
+          <div className="border-t border-border pt-4">
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">Звуки</p>
+            <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-text">Звуки сообщений</p>
+                <p className="mt-0.5 text-xs text-text-muted">Звук при отправке и получении сообщений</p>
+              </div>
+              <button
+                onClick={handleToggleSounds}
+                className={`relative ml-4 h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${soundsEnabled ? 'bg-accent' : 'bg-border'}`}
+              >
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${soundsEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+          </div>
 
           <div className="border-t border-border pt-4">
             <p className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">Приватность</p>

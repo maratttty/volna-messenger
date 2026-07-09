@@ -1,33 +1,61 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Search, X } from 'lucide-react';
 import { searchMessagesInChat } from '../../lib/messages';
-import { formatRelativeTime } from '../../lib/time';
+import { formatSearchResultTime } from '../../lib/time';
+import { Avatar } from '../ui/Avatar';
 import type { Message } from '../../types/database';
+
+interface SenderInfo {
+  name: string;
+  avatarUrl: string | null;
+}
 
 interface ChatSearchBarProps {
   chatId: string;
   currentUserId: string;
+  senderInfo: Map<string, SenderInfo>;
   onJumpTo: (message: Message) => void;
   onClose: () => void;
 }
 
-function snippet(message: Message): string {
-  if (message.content) return message.content;
+function mediaSnippet(message: Message): string {
   switch (message.type) {
     case 'image':
       return '📷 Фото';
     case 'file':
       return `📎 ${message.attachment_meta?.name ?? 'Файл'}`;
     case 'voice':
-      return '🎤 Голосовое сообщение';
+      return '🎤 Голосовое';
     case 'video_note':
-      return '📹 Видео-сообщение';
+      return '📹 Видео';
     default:
       return '';
   }
 }
 
-export function ChatSearchBar({ chatId, currentUserId, onJumpTo, onClose }: ChatSearchBarProps) {
+// Windowed preview around the first match, with the matched substring split
+// out so it can be highlighted — case-insensitive, matches the ilike search.
+function highlightedSnippet(
+  content: string,
+  query: string,
+  maxLen = 90,
+): { before: string; match: string; after: string } | null {
+  const idx = content.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return null;
+
+  const matchEnd = idx + query.length;
+  const pad = Math.max(0, Math.floor((maxLen - query.length) / 2));
+  const start = Math.max(0, idx - pad);
+  const end = Math.min(content.length, matchEnd + pad);
+
+  return {
+    before: (start > 0 ? '…' : '') + content.slice(start, idx),
+    match: content.slice(idx, matchEnd),
+    after: content.slice(matchEnd, end) + (end < content.length ? '…' : ''),
+  };
+}
+
+export function ChatSearchBar({ chatId, currentUserId, senderInfo, onJumpTo, onClose }: ChatSearchBarProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -94,16 +122,42 @@ export function ChatSearchBar({ chatId, currentUserId, onJumpTo, onClose }: Chat
             <p className="px-2 py-2 text-xs text-text-muted">Ничего не найдено</p>
           )}
           {!loading &&
-            results.map((message) => (
-              <button
-                key={message.id}
-                onClick={() => onJumpTo(message)}
-                className="flex w-full flex-col items-start gap-0.5 rounded-lg px-2 py-1.5 text-left transition hover:bg-surface-hover"
-              >
-                <span className="w-full truncate text-sm text-text">{snippet(message)}</span>
-                <span className="text-xs text-text-muted">{formatRelativeTime(message.created_at)}</span>
-              </button>
-            ))}
+            results.map((message) => {
+              const sender = (message.sender_id && senderInfo.get(message.sender_id)) || {
+                name: 'Пользователь',
+                avatarUrl: null,
+              };
+              const highlighted = message.content ? highlightedSnippet(message.content, query.trim()) : null;
+
+              return (
+                <button
+                  key={message.id}
+                  onClick={() => onJumpTo(message)}
+                  className="flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-surface-hover"
+                >
+                  <Avatar name={sender.name} src={sender.avatarUrl} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-medium text-text">{sender.name}</span>
+                      <span className="shrink-0 text-xs text-text-muted">
+                        {formatSearchResultTime(message.created_at)}
+                      </span>
+                    </div>
+                    <div className="truncate text-sm text-text-muted">
+                      {highlighted ? (
+                        <>
+                          {highlighted.before}
+                          <mark className="rounded bg-accent/30 text-text">{highlighted.match}</mark>
+                          {highlighted.after}
+                        </>
+                      ) : (
+                        mediaSnippet(message)
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
         </div>
       )}
     </div>
