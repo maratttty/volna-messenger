@@ -20,6 +20,26 @@ function pickMimeType(): string {
   return '';
 }
 
+// Voice is intelligible speech, not music — 32kbps mono is plenty (roughly
+// what WhatsApp-style voice notes use) and cuts upload size/time by several
+// times versus the browser's unspecified default bitrate.
+const VOICE_BITRATE_BPS = 32_000;
+
+// Some browsers (notably iOS Safari with the AAC codec) throw a synchronous
+// NotSupportedError from the MediaRecorder constructor if the requested
+// bitrate isn't achievable for the chosen codec. Falling back to the
+// browser's own default bitrate keeps recording working everywhere instead
+// of failing outright on those browsers.
+function createRecorder(stream: MediaStream, mimeType: string): MediaRecorder {
+  const preferred: MediaRecorderOptions = { audioBitsPerSecond: VOICE_BITRATE_BPS };
+  if (mimeType) preferred.mimeType = mimeType;
+  try {
+    return new MediaRecorder(stream, preferred);
+  } catch {
+    return new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  }
+}
+
 export interface RecordedAudio {
   blob: Blob;
   durationSeconds: number;
@@ -85,12 +105,21 @@ export function useAudioRecorder() {
     setStream(mediaStream);
 
     const mimeType = pickMimeType();
-    const recorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : undefined);
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
-    };
-    recorderRef.current = recorder;
-    recorder.start(1000);
+    let recorder: MediaRecorder;
+    try {
+      recorder = createRecorder(mediaStream, mimeType);
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorderRef.current = recorder;
+      recorder.start(1000);
+    } catch {
+      mediaStream.getTracks().forEach((t) => t.stop());
+      setStream(null);
+      startingRef.current = false;
+      setError('Не удалось начать запись. Попробуйте ещё раз.');
+      return;
+    }
     startingRef.current = false;
 
     startTimeRef.current = Date.now();
