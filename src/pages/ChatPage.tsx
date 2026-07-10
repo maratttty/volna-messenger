@@ -177,8 +177,8 @@ export default function ChatPage() {
         <div className="pb-safe flex shrink-0 items-center border-t border-border bg-surface">
           {(
             [
-              { id: 'chats',    Icon: MessageSquare, label: 'Чаты',     badge: totalUnread },
               { id: 'contacts', Icon: Users,         label: 'Контакты', badge: 0 },
+              { id: 'chats',    Icon: MessageSquare, label: 'Чаты',     badge: totalUnread },
             ] as { id: SidebarTab; Icon: typeof MessageSquare; label: string; badge: number }[]
           ).map(({ id, Icon, label, badge }) => (
             <button
