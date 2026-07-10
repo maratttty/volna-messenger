@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Crown, Shield, X, LogOut, Link as LinkIcon, Check, Camera } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Avatar } from '../ui/Avatar';
-import type { MemberWithProfile, MemberRole } from '../../types/database';
+import type { MemberWithProfile, MemberRole, Profile } from '../../types/database';
 import { updateMemberRole, removeMember, getOrCreateInvite, postSystemMessage, updateChatInfo } from '../../lib/chats';
 import { uploadAttachment } from '../../lib/storage';
 import { useChatStore } from '../../store/chat-store';
@@ -17,6 +17,7 @@ interface GroupMembersPanelProps {
   onClose: () => void;
   onChanged: () => void;
   onLeft: () => void;
+  onOpenProfile: (profile: Profile) => void;
 }
 
 function roleLabel(role: MemberRole): string {
@@ -35,6 +36,7 @@ export function GroupMembersPanel({
   onClose,
   onChanged,
   onLeft,
+  onOpenProfile,
 }: GroupMembersPanelProps) {
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -213,18 +215,23 @@ export function GroupMembersPanel({
             const canModerate = canManage && !isSelf && member.role !== 'owner';
             return (
               <div key={member.user_id} className="flex items-center gap-3 px-5 py-2">
-                <Avatar name={member.profile.display_name} src={member.profile.avatar_url} size="sm" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-text">
-                    {member.profile.display_name}
-                    {isSelf && ' (вы)'}
-                  </p>
-                  <p className="flex items-center gap-1 truncate text-xs text-text-muted">
-                    {member.role === 'owner' && <Crown size={12} />}
-                    {member.role === 'admin' && <Shield size={12} />}
-                    {roleLabel(member.role)}
-                  </p>
-                </div>
+                <button
+                  onClick={() => onOpenProfile(member.profile)}
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left transition hover:bg-surface-hover"
+                >
+                  <Avatar name={member.profile.display_name} src={member.profile.avatar_url} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-text">
+                      {member.profile.display_name}
+                      {isSelf && ' (вы)'}
+                    </p>
+                    <p className="flex items-center gap-1 truncate text-xs text-text-muted">
+                      {member.role === 'owner' && <Crown size={12} />}
+                      {member.role === 'admin' && <Shield size={12} />}
+                      {roleLabel(member.role)}
+                    </p>
+                  </div>
+                </button>
                 {canModerate && (
                   <div className="flex shrink-0 items-center gap-1">
                     <button

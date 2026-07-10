@@ -5,7 +5,7 @@ import {
   Plane, Rocket, Crown, Zap, Sun, Coffee, Umbrella, Camera,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { ChatWithMeta, Message, MessageType, MemberWithProfile } from '../../types/database';
+import type { ChatWithMeta, Message, MessageType, MemberWithProfile, Profile } from '../../types/database';
 import { useMessages } from '../../hooks/useMessages';
 import { useTyping } from '../../hooks/useTyping';
 import { usePinnedMessages } from '../../hooks/usePinnedMessages';
@@ -20,6 +20,7 @@ import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { ForwardModal } from './ForwardModal';
 import { ChatSearchBar } from './ChatSearchBar';
 import { GroupMembersPanel } from './GroupMembersPanel';
+import { UserProfilePanel } from './UserProfilePanel';
 import { Avatar } from '../ui/Avatar';
 import { MediaPlaybackPanel } from './MediaPlaybackPanel';
 
@@ -159,6 +160,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, c
   const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null);
   const [members, setMembers] = useState<MemberWithProfile[]>([]);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [profileTarget, setProfileTarget] = useState<Profile | null>(null);
   const [pinnedIndex, setPinnedIndex] = useState(0);
 
   const { pins, pinMessage: doPinMessage, unpinMessage: doUnpinMessage } = usePinnedMessages(chat.id);
@@ -259,6 +261,23 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, c
     if (chat.type !== 'group') return undefined;
     return new Map(members.map((m) => [m.user_id, m.profile.display_name]));
   }, [chat.type, members]);
+
+  // Group-only: full profile per sender, so clicking a sender's name above a
+  // bubble can open their profile (own messages never show a sender name, so
+  // no need to cover the current user here).
+  const senderProfiles = useMemo(() => {
+    if (chat.type !== 'group') return undefined;
+    return new Map(members.map((m) => [m.user_id, m.profile]));
+  }, [chat.type, members]);
+
+  // If the profile currently being viewed is the partner of an existing
+  // direct chat, the panel shows "mute" instead of "написать сообщение" —
+  // works the same whether the profile was opened from the header, the
+  // group member list, or a message sender's name.
+  const profileTargetChat = useMemo(() => {
+    if (!profileTarget) return undefined;
+    return chats.find((c) => c.type === 'direct' && c.otherUser?.id === profileTarget.id);
+  }, [profileTarget, chats]);
 
   // Name + avatar per sender, for search results (which need both regardless
   // of chat type, unlike senderNames above which is group-bubbles-only).
@@ -395,13 +414,17 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, c
             </div>
           </button>
         ) : (
-          <>
+          <button
+            onClick={() => chat.otherUser && setProfileTarget(chat.otherUser)}
+            disabled={!chat.otherUser}
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left transition hover:bg-surface-hover"
+          >
             <Avatar name={title} src={avatarSrc} online={online} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-text">{title}</p>
               {subtitle && <p className="truncate text-xs text-text-muted">{subtitle}</p>}
             </div>
-          </>
+          </button>
         )}
         <button
           onClick={() => setSearchOpen((s) => !s)}
@@ -468,6 +491,8 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, c
           loading={loading}
           onLoadMore={loadMore}
           senderNames={senderNames}
+          senderProfiles={senderProfiles}
+          onOpenProfile={setProfileTarget}
           resolveSenderName={resolveSenderName}
           onReply={handleReply}
           onEdit={handleEdit}
@@ -567,6 +592,17 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, c
           onClose={() => setMembersOpen(false)}
           onChanged={() => void refreshMembers()}
           onLeft={() => setMembersOpen(false)}
+          onOpenProfile={setProfileTarget}
+        />
+      )}
+
+      {profileTarget && (
+        <UserProfilePanel
+          profile={profileTarget}
+          currentUserId={currentUserId}
+          directChatId={profileTargetChat?.id}
+          directChatMuted={profileTargetChat?.muted}
+          onClose={() => setProfileTarget(null)}
         />
       )}
     </div>

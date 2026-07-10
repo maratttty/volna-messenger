@@ -2,7 +2,7 @@ import { useLayoutEffect, useEffect, useMemo, useRef, useState, Fragment } from 
 import { ChevronDown } from 'lucide-react';
 import { MessageBubble } from '../Message/MessageBubble';
 import { Spinner } from '../ui/Spinner';
-import type { Message, MessageStatusValue, ReactionSummary } from '../../types/database';
+import type { Message, MessageStatusValue, ReactionSummary, Profile } from '../../types/database';
 
 interface MessageListProps {
   messages: Message[];
@@ -15,6 +15,8 @@ interface MessageListProps {
   fetchDone: boolean;
   onLoadMore: () => void;
   senderNames?: Map<string, string>;
+  senderProfiles?: Map<string, Profile>;
+  onOpenProfile: (profile: Profile) => void;
   resolveSenderName: (senderId: string | null) => string;
   onReply: (message: Message) => void;
   onEdit: (message: Message) => void;
@@ -42,6 +44,8 @@ export function MessageList({
   fetchDone,
   onLoadMore,
   senderNames,
+  senderProfiles,
+  onOpenProfile,
   resolveSenderName,
   onReply,
   onEdit,
@@ -292,6 +296,8 @@ export function MessageList({
                   isOwn={msg.sender_id === currentUserId}
                   status={statuses.get(msg.id)}
                   senderName={msg.sender_id ? senderNames?.get(msg.sender_id) : undefined}
+                  senderProfile={msg.sender_id ? senderProfiles?.get(msg.sender_id) : undefined}
+                  onOpenProfile={onOpenProfile}
                   repliedMessage={repliedMessage}
                   repliedSenderName={repliedMessage ? resolveSenderName(repliedMessage.sender_id) : undefined}
                   reactions={reactions.get(msg.id)}

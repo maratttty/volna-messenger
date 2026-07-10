@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { Paperclip, Reply, Pencil, Trash2, Forward, Pin, PinOff, Copy, Check, CheckCheck } from 'lucide-react';
-import type { Message, MessageStatusValue, ReactionSummary } from '../../types/database';
+import type { Message, MessageStatusValue, ReactionSummary, Profile } from '../../types/database';
 import { formatMessageTime } from '../../lib/time';
 import { AudioPlayer } from './AudioPlayer';
 import { VideoNotePlayer } from './VideoNotePlayer';
@@ -14,6 +14,8 @@ interface MessageBubbleProps {
   isOwn: boolean;
   status?: MessageStatusValue;
   senderName?: string;
+  senderProfile?: Profile;
+  onOpenProfile?: (profile: Profile) => void;
   repliedMessage?: Message;
   repliedSenderName?: string;
   reactions?: ReactionSummary[];
@@ -120,6 +122,8 @@ export function MessageBubble({
   isOwn,
   status,
   senderName,
+  senderProfile,
+  onOpenProfile,
   repliedMessage,
   repliedSenderName,
   reactions,
@@ -179,7 +183,19 @@ export function MessageBubble({
           </p>
         )}
         {!isOwn && senderName && !isVideoNote && (
-          <p className="mb-0.5 text-xs font-medium text-accent">{senderName}</p>
+          senderProfile && onOpenProfile ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenProfile(senderProfile);
+              }}
+              className="mb-0.5 block text-xs font-medium text-accent hover:underline"
+            >
+              {senderName}
+            </button>
+          ) : (
+            <p className="mb-0.5 text-xs font-medium text-accent">{senderName}</p>
+          )
         )}
         {message.reply_to_id && (
           <button
