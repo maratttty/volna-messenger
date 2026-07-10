@@ -25,16 +25,23 @@ function pickMimeType(): string {
 // times versus the browser's unspecified default bitrate.
 const VOICE_BITRATE_BPS = 32_000;
 
-// Some browsers (notably iOS Safari with the AAC codec) throw a synchronous
-// NotSupportedError from the MediaRecorder constructor if the requested
-// bitrate isn't achievable for the chosen codec. Falling back to the
-// browser's own default bitrate keeps recording working everywhere instead
-// of failing outright on those browsers.
+// Opus (webm/ogg) has years of battle-tested low-bitrate support in Chrome
+// and Firefox — safe to force. AAC/MP4 is a much newer, less-tested
+// MediaRecorder path (Chrome only added it in 108, for Mac/Safari file
+// interop) and forcing a low bitrate on it has been observed to crash the
+// whole browser natively on Chrome/Mac — not a JS exception, so no amount of
+// try/catch can catch or prevent it. For AAC/MP4 we let the browser pick its
+// own default bitrate instead.
+function isOpusMimeType(mimeType: string): boolean {
+  return mimeType.startsWith('audio/webm') || mimeType.startsWith('audio/ogg');
+}
+
 function createRecorder(stream: MediaStream, mimeType: string): MediaRecorder {
-  const preferred: MediaRecorderOptions = { audioBitsPerSecond: VOICE_BITRATE_BPS };
-  if (mimeType) preferred.mimeType = mimeType;
+  const options: MediaRecorderOptions = {};
+  if (mimeType) options.mimeType = mimeType;
+  if (isOpusMimeType(mimeType)) options.audioBitsPerSecond = VOICE_BITRATE_BPS;
   try {
-    return new MediaRecorder(stream, preferred);
+    return new MediaRecorder(stream, options);
   } catch {
     return new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
   }
