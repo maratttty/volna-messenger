@@ -142,6 +142,7 @@ export interface Database {
     Tables: {
       profiles: { Row: Profile; Insert: Partial<Profile> & { id: string; username: string; display_name: string }; Update: Partial<Profile> };
       contacts: { Row: { user_id: string; contact_id: string; created_at: string }; Insert: { user_id: string; contact_id: string }; Update: never };
+      blocked_users: { Row: { blocker_id: string; blocked_id: string; created_at: string }; Insert: { blocker_id: string; blocked_id: string }; Update: never };
       chats: { Row: Chat; Insert: Partial<Chat> & { type: ChatType }; Update: Partial<Chat> };
       chat_members: { Row: ChatMember; Insert: Partial<ChatMember> & { chat_id: string; user_id: string }; Update: Partial<ChatMember> };
       invites: { Row: { id: string; chat_id: string; token: string; created_by: string | null; expires_at: string | null; revoked: boolean; created_at: string }; Insert: Record<string, unknown>; Update: Record<string, unknown> };

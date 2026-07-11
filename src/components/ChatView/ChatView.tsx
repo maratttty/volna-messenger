@@ -9,8 +9,9 @@ import type { ChatWithMeta, Message, MessageType, MemberWithProfile, Profile } f
 import { useMessages } from '../../hooks/useMessages';
 import { useTyping } from '../../hooks/useTyping';
 import { usePinnedMessages } from '../../hooks/usePinnedMessages';
+import { useBlockStatus } from '../../hooks/useBlockStatus';
 import { forwardMessage } from '../../lib/messages';
-import { fetchChatMembers } from '../../lib/chats';
+import { fetchChatMembers, unblockUser } from '../../lib/chats';
 import { formatLastSeen } from '../../lib/time';
 import { playSendSound } from '../../lib/sound';
 import { captureFirstFrame } from '../../lib/videoFrame';
@@ -162,6 +163,14 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, c
   const [membersOpen, setMembersOpen] = useState(false);
   const [profileTarget, setProfileTarget] = useState<Profile | null>(null);
   const [pinnedIndex, setPinnedIndex] = useState(0);
+
+  // Blocking only affects direct chats (see messages insert RLS policy) —
+  // group chats never check this.
+  const { blockedByMe, blockedMe, refresh: refreshBlockStatus } = useBlockStatus(
+    currentUserId,
+    chat.type === 'direct' ? chat.otherUser?.id : undefined,
+  );
+  const isBlocked = chat.type === 'direct' && (blockedByMe || blockedMe);
 
   const { pins, pinMessage: doPinMessage, unpinMessage: doUnpinMessage } = usePinnedMessages(chat.id);
   const pinnedMessages = pins.map((p) => p.message);
@@ -330,6 +339,12 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, c
   async function handleSendGif(gifUrl: string, title: string) {
     await sendGif(gifUrl, title, replyTarget?.id ?? null);
     setReplyTarget(null);
+  }
+
+  async function handleUnblock() {
+    if (!chat.otherUser) return;
+    await unblockUser(currentUserId, chat.otherUser.id);
+    await refreshBlockStatus();
   }
 
   function handleReply(message: Message) {
@@ -509,22 +524,37 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, c
         />
       </div>
 
-      <MessageInput
-        onSend={handleSend}
-        onSendFile={handleSendFile}
-        onSendVoice={handleSendVoice}
-        onSendVideoNote={handleSendVideoNote}
-        onSendGif={handleSendGif}
-        onTyping={notifyTyping}
-        onStartRecording={notifyActivity}
-        onStopRecording={notifyActivityStop}
-        replyTarget={replyTarget}
-        onCancelReply={() => setReplyTarget(null)}
-        editingMessage={editingMessage}
-        onCancelEdit={() => setEditingMessage(null)}
-        onSaveEdit={handleSaveEdit}
-        resolveSenderName={resolveSenderName}
-      />
+      {isBlocked ? (
+        <div className="pb-safe flex flex-col items-center gap-2 border-t border-border bg-surface px-4 py-4 text-center">
+          <p className="text-sm text-text-muted">
+            {blockedByMe
+              ? 'Вы заблокировали этого пользователя. Отправка сообщений недоступна.'
+              : 'Этот пользователь заблокировал вас. Отправка сообщений недоступна.'}
+          </p>
+          {blockedByMe && (
+            <button onClick={() => void handleUnblock()} className="text-sm font-medium text-accent">
+              Разблокировать
+            </button>
+          )}
+        </div>
+      ) : (
+        <MessageInput
+          onSend={handleSend}
+          onSendFile={handleSendFile}
+          onSendVoice={handleSendVoice}
+          onSendVideoNote={handleSendVideoNote}
+          onSendGif={handleSendGif}
+          onTyping={notifyTyping}
+          onStartRecording={notifyActivity}
+          onStopRecording={notifyActivityStop}
+          replyTarget={replyTarget}
+          onCancelReply={() => setReplyTarget(null)}
+          editingMessage={editingMessage}
+          onCancelEdit={() => setEditingMessage(null)}
+          onSaveEdit={handleSaveEdit}
+          resolveSenderName={resolveSenderName}
+        />
+      )}
 
       {deleteTarget && (
         <ConfirmDeleteModal
@@ -602,7 +632,13 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, c
           currentUserId={currentUserId}
           directChatId={profileTargetChat?.id}
           directChatMuted={profileTargetChat?.muted}
-          onClose={() => setProfileTarget(null)}
+          onClose={() => {
+            setProfileTarget(null);
+            // The panel may have just toggled the block state for this same
+            // person — refresh so the message input reflects it immediately
+            // instead of waiting for a remount.
+            if (chat.type === 'direct' && chat.otherUser?.id === profileTarget.id) void refreshBlockStatus();
+          }}
         />
       )}
     </div>

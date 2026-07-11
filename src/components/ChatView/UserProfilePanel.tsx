@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
-import { ArrowLeft, MessageSquare, MoreHorizontal, Copy, Check, Bell, BellOff } from 'lucide-react';
+import { ArrowLeft, MessageSquare, MoreHorizontal, Copy, Check, Bell, BellOff, Ban, UserCheck } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu';
 import type { Profile } from '../../types/database';
-import { getOrCreateDirectChat, setChatMuted } from '../../lib/chats';
+import { getOrCreateDirectChat, setChatMuted, blockUser, unblockUser } from '../../lib/chats';
 import { formatLastSeen } from '../../lib/time';
 import { useChatStore } from '../../store/chat-store';
+import { useBlockStatus } from '../../hooks/useBlockStatus';
 
 interface UserProfilePanelProps {
   profile: Profile;
@@ -32,6 +33,7 @@ export function UserProfilePanel({ profile, currentUserId, directChatId, directC
   const moreButtonRef = useRef<HTMLButtonElement>(null);
 
   const isSelf = profile.id === currentUserId;
+  const { blockedByMe, refresh: refreshBlockStatus } = useBlockStatus(currentUserId, isSelf ? undefined : profile.id);
   const online = profile.show_last_seen !== false && isOnline(profile.last_seen_at);
   const statusText = online
     ? 'в сети'
@@ -71,19 +73,37 @@ export function UserProfilePanel({ profile, currentUserId, directChatId, directC
     setTimeout(() => setCopied(false), 1500);
   }
 
-  // Blocking isn't wired up yet — no table/RLS for it exists in the database,
-  // so it's deliberately left out of this menu rather than shown as a dead
-  // button. Mute is the only "Ещё" action right now, and only once a direct
-  // chat actually exists to mute.
-  const menuItems: ContextMenuItem[] = directChatId
-    ? [
-        {
-          label: muted ? 'Включить звук' : 'Выключить звук',
-          icon: muted ? Bell : BellOff,
-          onClick: () => void handleToggleMute(),
-        },
-      ]
-    : [];
+  async function handleToggleBlock() {
+    setError(null);
+    try {
+      if (blockedByMe) await unblockUser(currentUserId, profile.id);
+      else await blockUser(currentUserId, profile.id);
+      await refreshBlockStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось изменить блокировку');
+    }
+  }
+
+  // Mute only makes sense once a direct chat exists (there's no per-user
+  // mute, only per-chat). Block/unblock works regardless — it's a relation
+  // between the two users, not tied to a chat.
+  const menuItems: ContextMenuItem[] = [
+    ...(directChatId
+      ? [
+          {
+            label: muted ? 'Включить звук' : 'Выключить звук',
+            icon: muted ? Bell : BellOff,
+            onClick: () => void handleToggleMute(),
+          },
+        ]
+      : []),
+    {
+      label: blockedByMe ? 'Разблокировать' : 'Заблокировать',
+      icon: blockedByMe ? UserCheck : Ban,
+      danger: !blockedByMe,
+      onClick: () => void handleToggleBlock(),
+    },
+  ];
 
   return (
     <div
@@ -124,9 +144,7 @@ export function UserProfilePanel({ profile, currentUserId, directChatId, directC
             <button
               ref={moreButtonRef}
               onClick={() => setMenuAnchor(moreButtonRef.current?.getBoundingClientRect() ?? null)}
-              disabled={menuItems.length === 0}
-              title={menuItems.length === 0 ? 'Доступно после первого чата с этим человеком' : undefined}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-surface px-4 py-2.5 text-sm font-medium text-text transition hover:bg-surface-hover disabled:opacity-40"
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-surface px-4 py-2.5 text-sm font-medium text-text transition hover:bg-surface-hover"
             >
               <MoreHorizontal size={16} />
               Ещё

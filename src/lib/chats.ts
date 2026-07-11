@@ -326,6 +326,40 @@ export async function setChatMuted(chatId: string, userId: string, muted: boolea
   if (error) throw error;
 }
 
+export async function blockUser(blockerId: string, blockedId: string): Promise<void> {
+  const { error } = await supabase.from('blocked_users').insert({ blocker_id: blockerId, blocked_id: blockedId });
+  if (error) throw error;
+}
+
+export async function unblockUser(blockerId: string, blockedId: string): Promise<void> {
+  const { error } = await supabase
+    .from('blocked_users')
+    .delete()
+    .eq('blocker_id', blockerId)
+    .eq('blocked_id', blockedId);
+  if (error) throw error;
+}
+
+// Actual enforcement (can't message someone who blocked you, or whom you
+// blocked) lives server-side in the messages insert RLS policy — this is
+// just for the UI to know which state to show/disable proactively instead of
+// waiting for a failed send.
+export async function fetchBlockStatus(
+  userId: string,
+  otherId: string,
+): Promise<{ blockedByMe: boolean; blockedMe: boolean }> {
+  const { data, error } = await supabase
+    .from('blocked_users')
+    .select('blocker_id, blocked_id')
+    .or(`and(blocker_id.eq.${userId},blocked_id.eq.${otherId}),and(blocker_id.eq.${otherId},blocked_id.eq.${userId})`);
+  if (error) throw error;
+  const rows = data ?? [];
+  return {
+    blockedByMe: rows.some((r) => r.blocker_id === userId && r.blocked_id === otherId),
+    blockedMe: rows.some((r) => r.blocker_id === otherId && r.blocked_id === userId),
+  };
+}
+
 // Reuses an existing non-revoked invite for the chat instead of minting a new
 // token every time the panel is opened — mirrors Telegram's persistent
 // "invite link" (revoking and replacing it is a separate, deliberate action).
