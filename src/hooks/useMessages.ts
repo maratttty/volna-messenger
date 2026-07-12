@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   fetchMessages,
@@ -13,6 +13,7 @@ import {
   updateReadCursor,
   fetchOwnMessageStatuses,
 } from '../lib/messages';
+import { loadMessagesCache, saveMessagesCache } from '../lib/messages-cache';
 import { uploadAttachment } from '../lib/storage';
 import { onNetworkRecovery } from '../lib/network';
 import { playSendSound, playReceiveSound } from '../lib/sound';
@@ -62,6 +63,21 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
     [currentUserId],
   );
 
+  // Stale-while-revalidate: hydrate from the last cached page synchronously
+  // before paint, so a chat opened earlier (even in a previous session)
+  // renders instantly instead of showing the spinner. Runs before the fetch
+  // effect below, which then revalidates in the background.
+  useLayoutEffect(() => {
+    if (!chatId || !currentUserId) return;
+    if ((useMessageStore.getState().messages[chatId] ?? []).length > 0) return;
+    const cached = loadMessagesCache(currentUserId, chatId);
+    if (cached && cached.messages.length > 0) {
+      setMessages(chatId, cached.messages, cached.hasMore);
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatId, currentUserId]);
+
   useEffect(() => {
     if (!chatId || !currentUserId) return;
     let cancelled = false;
@@ -72,6 +88,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       .then(({ messages: page, hasMore: more }) => {
         if (cancelled) return;
         setMessages(chatId, page, more);
+        saveMessagesCache(currentUserId, chatId, page, more);
         setFetchDone(true);
         // Persist the read cursor immediately (one fast row update) so that the
         // correct position survives a page refresh even if markChatRead is slow.
