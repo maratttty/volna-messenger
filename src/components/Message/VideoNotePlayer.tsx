@@ -9,6 +9,7 @@ interface VideoNotePlayerProps {
   messageId: string;
   senderName: string;
   posterUrl?: string;
+  uploadProgress?: number; // 0..1, only set while this message's attachment is still uploading
 }
 
 const SIZE         = 200;
@@ -20,7 +21,7 @@ function fmt(s: number) {
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 }
 
-export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, posterUrl }: VideoNotePlayerProps) {
+export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, posterUrl, uploadProgress }: VideoNotePlayerProps) {
   const videoRef   = useRef<HTMLVideoElement>(null);
   const wrapperRef = useRef<HTMLButtonElement>(null);
 
@@ -188,6 +189,7 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
 
   const progress  = duration > 0 ? currentTime / duration : 0;
   const remaining = Math.max(0, duration - currentTime);
+  const uploading = uploadProgress !== undefined && uploadProgress < 1;
 
   return (
     <button
@@ -197,14 +199,24 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
       style={{ width: OUTER, height: OUTER }}
       aria-label="Видео-сообщение"
     >
-      {/* Circular progress ring — only when playing with sound */}
-      {!effectiveMuted && (
+      {/* Upload ring takes priority while sending; otherwise the usual
+          playback ring (only shown while playing with sound). */}
+      {uploading ? (
         <CircularProgressRing
-          progress={progress}
+          progress={uploadProgress}
           size={OUTER}
           strokeWidth={3}
-          className="text-accent/70"
+          className="text-accent"
         />
+      ) : (
+        !effectiveMuted && (
+          <CircularProgressRing
+            progress={progress}
+            size={OUTER}
+            strokeWidth={3}
+            className="text-accent/70"
+          />
+        )
       )}
 
       {/* Video clipped to circle */}
@@ -244,9 +256,9 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
           </span>
         )}
 
-        {/* Duration / remaining */}
+        {/* Duration / remaining, or upload % while sending */}
         <span className="absolute bottom-2 right-2.5 rounded-full bg-black/50 px-1.5 py-0.5 text-[10px] font-medium text-white">
-          {fmt(playing || currentTime > 0 ? remaining : duration)}
+          {uploading ? `${Math.round(uploadProgress * 100)}%` : fmt(playing || currentTime > 0 ? remaining : duration)}
         </span>
 
         {/* "Viewed" badge */}

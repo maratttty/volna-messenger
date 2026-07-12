@@ -14,12 +14,13 @@ import {
   fetchOwnMessageStatuses,
 } from '../lib/messages';
 import { loadMessagesCache, saveMessagesCache } from '../lib/messages-cache';
-import { uploadAttachment } from '../lib/storage';
+import { uploadAttachmentWithProgress } from '../lib/storage';
 import { onNetworkRecovery } from '../lib/network';
 import { playSendSound, playReceiveSound } from '../lib/sound';
 import { fetchReactions, groupReactions, setReaction, removeReaction } from '../lib/reactions';
 import { useMessageStore } from '../store/message-store';
 import { useChatStore } from '../store/chat-store';
+import { useUploadProgressStore } from '../store/upload-progress-store';
 import type { Message, MessageStatusValue, MessageType, ReactionSummary } from '../types/database';
 
 export function useMessages(chatId: string | null, currentUserId: string | undefined, hiddenBeforeAt?: string | null) {
@@ -308,8 +309,20 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       };
       appendMessage(chatId, optimistic);
 
+      // Throttled so a fast upload on a good connection doesn't fire dozens
+      // of re-renders per second — only the bubble subscribed to this
+      // clientId re-renders anyway, but no need to churn even that. The
+      // final 100% tick always goes through immediately (unthrottled).
+      let lastProgressAt = 0;
+      const handleProgress = (fraction: number) => {
+        const now = Date.now();
+        if (fraction < 1 && now - lastProgressAt < 120) return;
+        lastProgressAt = now;
+        useUploadProgressStore.getState().setProgress(clientId, fraction);
+      };
+
       try {
-        const uploaded = await uploadAttachment('attachments', currentUserId, file);
+        const uploaded = await uploadAttachmentWithProgress('attachments', currentUserId, file, handleProgress);
         const confirmed = await sendAttachmentMessage({
           chatId,
           senderId: currentUserId,
@@ -327,6 +340,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         throw err;
       } finally {
         URL.revokeObjectURL(localUrl);
+        useUploadProgressStore.getState().clearProgress(clientId);
       }
     },
     [chatId, currentUserId, appendMessage],

@@ -4,8 +4,10 @@ import type { Message, MessageStatusValue, ReactionSummary, Profile } from '../.
 import { formatMessageTime } from '../../lib/time';
 import { AudioPlayer } from './AudioPlayer';
 import { VideoNotePlayer } from './VideoNotePlayer';
+import { CircularProgressRing } from '../ui/CircularProgressRing';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu';
+import { useUploadProgressStore } from '../../store/upload-progress-store';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -41,20 +43,47 @@ function formatBytes(size?: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
-function MessageContent({ message, senderName }: { message: Message; senderName?: string }) {
+// Small circular % readout, shared by the photo/file overlays below.
+function UploadRing({ progress, size }: { progress: number; size: number }) {
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <CircularProgressRing progress={progress} size={size} strokeWidth={3} className="text-white" trackClassName="text-white/30" />
+      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-medium text-white">
+        {Math.round(progress * 100)}%
+      </span>
+    </div>
+  );
+}
+
+function MessageContent({
+  message,
+  senderName,
+  uploadProgress,
+}: {
+  message: Message;
+  senderName?: string;
+  uploadProgress?: number;
+}) {
   if (message.deleted) {
     return <p className="text-sm italic text-text-muted">Сообщение удалено</p>;
   }
 
+  const uploading = uploadProgress !== undefined && uploadProgress < 1;
+
   switch (message.type) {
     case 'image':
       return (
-        <a href={message.attachment_url ?? '#'} target="_blank" rel="noopener noreferrer">
+        <a href={message.attachment_url ?? '#'} target="_blank" rel="noopener noreferrer" className="relative block">
           <img
             src={message.attachment_url ?? ''}
             alt={message.attachment_meta?.name ?? 'изображение'}
             className="max-h-72 max-w-full rounded-lg object-cover"
           />
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40">
+              <UploadRing progress={uploadProgress} size={44} />
+            </div>
+          )}
         </a>
       );
 
@@ -66,10 +95,17 @@ function MessageContent({ message, senderName }: { message: Message; senderName?
           rel="noopener noreferrer"
           className="flex items-center gap-2 rounded-lg bg-black/10 px-2 py-2 hover:bg-black/20"
         >
-          <Paperclip size={20} className="shrink-0" />
+          <div className="relative flex h-8 w-8 shrink-0 items-center justify-center">
+            <Paperclip size={20} className={uploading ? 'opacity-30' : ''} />
+            {uploading && (
+              <CircularProgressRing progress={uploadProgress} size={32} strokeWidth={2.5} className="text-accent" trackClassName="text-black/10" />
+            )}
+          </div>
           <div className="min-w-0">
             <p className="truncate text-sm">{message.attachment_meta?.name ?? 'Файл'}</p>
-            <p className="text-xs text-text-muted">{formatBytes(message.attachment_meta?.size)}</p>
+            <p className="text-xs text-text-muted">
+              {uploading ? `${Math.round(uploadProgress * 100)}%` : formatBytes(message.attachment_meta?.size)}
+            </p>
           </div>
         </a>
       );
@@ -81,6 +117,7 @@ function MessageContent({ message, senderName }: { message: Message; senderName?
           duration={message.attachment_meta?.duration}
           messageId={message.id}
           senderName={senderName ?? ''}
+          uploadProgress={uploadProgress}
         />
       );
 
@@ -92,6 +129,7 @@ function MessageContent({ message, senderName }: { message: Message; senderName?
           messageId={message.id}
           senderName={senderName ?? ''}
           posterUrl={message.attachment_meta?.posterUrl}
+          uploadProgress={uploadProgress}
         />
       );
 
@@ -138,6 +176,9 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const menu = useContextMenu();
   const bubbleRef = useRef<HTMLDivElement>(null);
+  const rawUploadProgress = useUploadProgressStore((s) =>
+    message.client_id ? s.progress[message.client_id] : undefined,
+  );
 
   if (message.type === 'system') {
     return (
@@ -148,6 +189,9 @@ export function MessageBubble({
   }
 
   const isPending = message.id.startsWith('pending-');
+  // Gate on isPending too: once the message is confirmed, hide the ring
+  // immediately even if the store's clearProgress() call hasn't landed yet.
+  const uploadProgress = isPending ? rawUploadProgress : undefined;
   const isVideoNote = message.type === 'video_note';
   const canEdit = isOwn && message.type === 'text' && !message.deleted;
   const canCopy = message.type === 'text' && !message.deleted && !!message.content;
@@ -209,7 +253,7 @@ export function MessageBubble({
             <p className="truncate text-xs text-text-muted">{repliedPreviewText(repliedMessage)}</p>
           </button>
         )}
-        <MessageContent message={message} senderName={senderName} />
+        <MessageContent message={message} senderName={senderName} uploadProgress={uploadProgress} />
         {reactions && reactions.length > 0 && (
           <div className={`mt-1 flex flex-wrap gap-1 ${isVideoNote ? 'px-1' : ''}`}>
             {reactions.map((r) => (
