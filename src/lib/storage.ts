@@ -5,6 +5,7 @@ export type AttachmentBucket = 'avatars' | 'attachments';
 
 export class AttachmentTooLargeError extends Error {}
 export class AttachmentTypeError extends Error {}
+export class UploadCancelledError extends Error {}
 
 // Anything explicitly disallowed for security reasons (executables, scripts).
 const BLOCKED_MIME_PATTERNS = [/^application\/x-msdownload$/, /^application\/x-sh$/, /^text\/x-sh$/];
@@ -82,6 +83,7 @@ export async function uploadAttachmentWithProgress(
   userId: string,
   file: File,
   onProgress: (fraction: number) => void,
+  signal?: AbortSignal,
 ): Promise<UploadResult> {
   validateAttachment(file);
   const path = buildAttachmentPath(userId, file);
@@ -110,6 +112,8 @@ export async function uploadAttachmentWithProgress(
       }
     };
     xhr.onerror = () => reject(new Error('Ошибка сети при загрузке файла'));
+    xhr.onabort = () => reject(new UploadCancelledError('Загрузка отменена'));
+    signal?.addEventListener('abort', () => xhr.abort());
 
     const formData = new FormData();
     formData.append('cacheControl', '3600');

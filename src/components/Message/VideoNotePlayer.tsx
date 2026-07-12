@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Play, Volume2, Eye } from 'lucide-react';
+import { Play, Volume2, Eye, X } from 'lucide-react';
 import { CircularProgressRing } from '../ui/CircularProgressRing';
 import { usePlaybackStore } from '../../stores/playbackStore';
 
@@ -10,6 +10,7 @@ interface VideoNotePlayerProps {
   senderName: string;
   posterUrl?: string;
   uploadProgress?: number; // 0..1, only set while this message's attachment is still uploading
+  onCancelUpload?: () => void;
 }
 
 const SIZE         = 200;
@@ -21,7 +22,7 @@ function fmt(s: number) {
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 }
 
-export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, posterUrl, uploadProgress }: VideoNotePlayerProps) {
+export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, posterUrl, uploadProgress, onCancelUpload }: VideoNotePlayerProps) {
   const videoRef   = useRef<HTMLVideoElement>(null);
   const wrapperRef = useRef<HTMLButtonElement>(null);
 
@@ -150,6 +151,9 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
 
     const obs = new IntersectionObserver(
       (entries) => {
+        // Never autoplay while the attachment is still uploading — it's
+        // showing the local blob and would fight with the cancel (X) tap target.
+        if (uploadProgress !== undefined && uploadProgress < 1) return;
         const visible = entries[0].isIntersecting;
         if (visible && !autoplayRef.current && !playing) {
           autoplayRef.current = true;
@@ -166,7 +170,7 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
     );
     obs.observe(wrapper);
     return () => obs.disconnect();
-  }, [playing]);
+  }, [playing, uploadProgress]);
 
   // ── Tap handler ─────────────────────────────────────────────────
   const handleTap = useCallback(() => {
@@ -194,7 +198,7 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
   return (
     <button
       ref={wrapperRef}
-      onClick={handleTap}
+      onClick={uploading && onCancelUpload ? onCancelUpload : handleTap}
       className="relative select-none"
       style={{ width: OUTER, height: OUTER }}
       aria-label="Видео-сообщение"
@@ -244,16 +248,24 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
           />
         )}
 
-        {/* Play overlay — shown when paused/idle */}
-        {!playing && (
-          <span className="absolute inset-0 flex items-center justify-center bg-black/20 transition-opacity duration-150">
+        {/* Cancel (X) overlay while uploading, otherwise the usual play overlay */}
+        {uploading ? (
+          <span className="absolute inset-0 flex items-center justify-center bg-black/30">
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/40">
-              {effectiveMuted
-                ? <Volume2 size={22} className="text-white drop-shadow" />
-                : <Play    size={22} className="fill-white text-white drop-shadow" />
-              }
+              <X size={22} className="text-white drop-shadow" />
             </span>
           </span>
+        ) : (
+          !playing && (
+            <span className="absolute inset-0 flex items-center justify-center bg-black/20 transition-opacity duration-150">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/40">
+                {effectiveMuted
+                  ? <Volume2 size={22} className="text-white drop-shadow" />
+                  : <Play    size={22} className="fill-white text-white drop-shadow" />
+                }
+              </span>
+            </span>
+          )
         )}
 
         {/* Duration / remaining, or upload % while sending */}

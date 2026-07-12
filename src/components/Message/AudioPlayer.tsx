@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useMemo } from 'react';
-import { Play, Pause } from 'lucide-react';
+import { Play, Pause, X } from 'lucide-react';
 import { usePlaybackStore } from '../../stores/playbackStore';
 import { CircularProgressRing } from '../ui/CircularProgressRing';
 
@@ -9,6 +9,7 @@ interface AudioPlayerProps {
   messageId: string;
   senderName: string;
   uploadProgress?: number; // 0..1, only set while this message's attachment is still uploading
+  onCancelUpload?: () => void;
 }
 
 const BAR_COUNT = 28;
@@ -30,7 +31,7 @@ function generateBarHeights(seed: string): number[] {
   return heights;
 }
 
-export function AudioPlayer({ src, duration, messageId, senderName, uploadProgress }: AudioPlayerProps) {
+export function AudioPlayer({ src, duration, messageId, senderName, uploadProgress, onCancelUpload }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const barHeights = useMemo(() => generateBarHeights(src), [src]);
@@ -117,19 +118,28 @@ export function AudioPlayer({ src, duration, messageId, senderName, uploadProgre
   const effectiveDuration = (el && isFinite(el.duration)) ? el.duration : (duration ?? 0);
   const progress = effectiveDuration > 0 ? currentTime / effectiveDuration : 0;
   const exactBarIndex = progress * BAR_COUNT;
+  const uploading = uploadProgress !== undefined && uploadProgress < 1;
 
   return (
     <div className="flex w-56 items-center gap-2 py-1">
       <audio ref={audioRef} src={src} preload="metadata" />
       <div className="relative h-9 w-9 shrink-0">
-        <button
-          onClick={toggle}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-bg"
-        >
-          {playing ? <Pause size={16} /> : <Play size={16} />}
-        </button>
-        {uploadProgress !== undefined && uploadProgress < 1 && (
-          <CircularProgressRing progress={uploadProgress} size={36} strokeWidth={2.5} className="text-white" trackClassName="text-white/30" />
+        {uploading && onCancelUpload ? (
+          <button
+            onClick={onCancelUpload}
+            aria-label="Отменить загрузку"
+            className="relative flex h-9 w-9 items-center justify-center rounded-full bg-accent text-bg"
+          >
+            <CircularProgressRing progress={uploadProgress} size={36} strokeWidth={2.5} className="text-white" trackClassName="text-white/30" />
+            <X size={16} />
+          </button>
+        ) : (
+          <button
+            onClick={toggle}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-bg"
+          >
+            {playing ? <Pause size={16} /> : <Play size={16} />}
+          </button>
         )}
       </div>
       <div className="flex flex-1 items-end gap-[2px]">

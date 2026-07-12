@@ -14,7 +14,7 @@ import {
   fetchOwnMessageStatuses,
 } from '../lib/messages';
 import { loadMessagesCache, saveMessagesCache } from '../lib/messages-cache';
-import { uploadAttachmentWithProgress } from '../lib/storage';
+import { uploadAttachmentWithProgress, UploadCancelledError } from '../lib/storage';
 import { onNetworkRecovery } from '../lib/network';
 import { playSendSound, playReceiveSound } from '../lib/sound';
 import { fetchReactions, groupReactions, setReaction, removeReaction } from '../lib/reactions';
@@ -309,6 +309,16 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       };
       appendMessage(chatId, optimistic);
 
+      // Seed at 0 synchronously, before the XHR even starts — otherwise a
+      // small/fast upload (a short voice note, say) can complete before its
+      // first progress event fires, and the very first value this message's
+      // clientId ever gets in the store is 1 (done). That would skip the
+      // ring entirely. Seeding 0 guarantees at least one visible frame.
+      useUploadProgressStore.getState().setProgress(clientId, 0);
+
+      const controller = new AbortController();
+      useUploadProgressStore.getState().registerAbort(clientId, () => controller.abort());
+
       // Throttled so a fast upload on a good connection doesn't fire dozens
       // of re-renders per second — only the bubble subscribed to this
       // clientId re-renders anyway, but no need to churn even that. The
@@ -322,7 +332,13 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       };
 
       try {
-        const uploaded = await uploadAttachmentWithProgress('attachments', currentUserId, file, handleProgress);
+        const uploaded = await uploadAttachmentWithProgress(
+          'attachments',
+          currentUserId,
+          file,
+          handleProgress,
+          controller.signal,
+        );
         const confirmed = await sendAttachmentMessage({
           chatId,
           senderId: currentUserId,
@@ -337,6 +353,9 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         playSendSound();
       } catch (err) {
         useMessageStore.getState().removeMessage(chatId, optimistic.id);
+        // User-initiated cancel (the X button) — not a real failure, so no
+        // error should surface to MessageInput's catch/error-banner logic.
+        if (err instanceof UploadCancelledError) return;
         throw err;
       } finally {
         URL.revokeObjectURL(localUrl);
