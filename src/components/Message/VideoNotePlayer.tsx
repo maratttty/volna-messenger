@@ -203,24 +203,16 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
       style={{ width: OUTER, height: OUTER }}
       aria-label="Видео-сообщение"
     >
-      {/* Upload ring takes priority while sending; otherwise the usual
-          playback ring (only shown while playing with sound). */}
-      {uploading ? (
+      {/* Playback ring only — around the whole circle, same as before. The
+          upload ring lives on the small centered cancel button below instead
+          (matching the voice-message style), not around the whole circle. */}
+      {!uploading && !effectiveMuted && (
         <CircularProgressRing
-          progress={uploadProgress}
+          progress={progress}
           size={OUTER}
           strokeWidth={3}
-          className="text-accent"
+          className="text-accent/70"
         />
-      ) : (
-        !effectiveMuted && (
-          <CircularProgressRing
-            progress={progress}
-            size={OUTER}
-            strokeWidth={3}
-            className="text-accent/70"
-          />
-        )
       )}
 
       {/* Video clipped to circle */}
@@ -248,11 +240,14 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
           />
         )}
 
-        {/* Cancel (X) overlay while uploading, otherwise the usual play overlay */}
+        {/* Cancel overlay while uploading — ring wraps the X itself, matching
+            the voice-message cancel button, not the whole circle. Otherwise
+            the usual play overlay. */}
         {uploading ? (
-          <span className="absolute inset-0 flex items-center justify-center bg-black/30">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/40">
-              <X size={22} className="text-white drop-shadow" />
+          <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+            <span className="relative flex items-center justify-center" style={{ width: 56, height: 56 }}>
+              <CircularProgressRing progress={uploadProgress} size={56} strokeWidth={3} className="text-white" trackClassName="text-white/30" smooth />
+              <X size={24} className="text-white drop-shadow" />
             </span>
           </span>
         ) : (

@@ -130,7 +130,7 @@ export function AudioPlayer({ src, duration, messageId, senderName, uploadProgre
             aria-label="Отменить загрузку"
             className="relative flex h-9 w-9 items-center justify-center rounded-full bg-accent text-bg"
           >
-            <CircularProgressRing progress={uploadProgress} size={36} strokeWidth={2.5} className="text-white" trackClassName="text-white/30" />
+            <CircularProgressRing progress={uploadProgress} size={36} strokeWidth={2.5} className="text-white" trackClassName="text-white/30" smooth />
             <X size={16} />
           </button>
         ) : (

@@ -4,6 +4,11 @@ interface CircularProgressRingProps {
   strokeWidth?: number;
   className?: string;
   trackClassName?: string;
+  // Animates transitions between progress values via CSS. Meant for upload
+  // progress, which arrives in throttled/uneven XHR ticks and looks jerky
+  // without it. Playback rings already update every rAF frame and stay off
+  // by default — a transition there would make the ring visibly lag the video.
+  smooth?: boolean;
 }
 
 // Overlay ring used for video-note playback/recording progress — absolutely
@@ -14,6 +19,7 @@ export function CircularProgressRing({
   strokeWidth = 3,
   className = 'text-accent',
   trackClassName = 'text-white/25',
+  smooth = false,
 }: CircularProgressRingProps) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -39,7 +45,7 @@ export function CircularProgressRing({
         strokeLinecap="round"
         strokeDasharray={circumference}
         strokeDashoffset={offset}
-        className={className}
+        className={`${className}${smooth ? ' transition-[stroke-dashoffset] duration-200 ease-out' : ''}`}
       />
     </svg>
   );
