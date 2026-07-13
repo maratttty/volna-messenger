@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useOutboxProcessor } from '../hooks/useOutboxProcessor';
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { session, profile, loading } = useAuth();
   const location = useLocation();
+  useOutboxProcessor(!!session);
 
   if (loading) {
     return <div className="h-full bg-bg" />;

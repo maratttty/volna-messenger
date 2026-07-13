@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Paperclip, Reply, Pencil, Trash2, Forward, Pin, PinOff, Copy, Check, CheckCheck, X } from 'lucide-react';
+import { Paperclip, Reply, Pencil, Trash2, Forward, Pin, PinOff, Copy, Check, CheckCheck, X, Clock, AlertCircle, RotateCw } from 'lucide-react';
 import type { Message, MessageStatusValue, ReactionSummary, Profile } from '../../types/database';
 import { formatMessageTime } from '../../lib/time';
 import { AudioPlayer } from './AudioPlayer';
@@ -8,6 +8,8 @@ import { CircularProgressRing } from '../ui/CircularProgressRing';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu';
 import { useUploadProgressStore } from '../../store/upload-progress-store';
+import { useSendStatusStore } from '../../store/send-status-store';
+import { retryFailedItem, deleteOutboxItem } from '../../lib/outbox';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -220,6 +222,9 @@ export function MessageBubble({
   const rawUploadProgress = useUploadProgressStore((s) =>
     message.client_id ? s.progress[message.client_id] : undefined,
   );
+  const sendStatus = useSendStatusStore((s) =>
+    message.client_id ? s.status[message.client_id] : undefined,
+  );
 
   if (message.type === 'system') {
     return (
@@ -245,6 +250,9 @@ export function MessageBubble({
   const canEdit = isOwn && message.type === 'text' && !message.deleted;
   const canCopy = message.type === 'text' && !message.deleted && !!message.content;
   const canActOn = !message.deleted && !isPending;
+  const isQueued = !!message.client_id && sendStatus === 'queued';
+  const isFailed = !!message.client_id && sendStatus === 'failed';
+  const canRetryOrDelete = isQueued || isFailed;
 
   const menuItems: ContextMenuItem[] = canActOn
     ? [
@@ -257,13 +265,18 @@ export function MessageBubble({
           : { label: 'Закрепить', icon: Pin,    onClick: onTogglePin },
         { label: 'Удалить', icon: Trash2, onClick: () => onDelete(message), danger: true as const },
       ]
+    : canRetryOrDelete
+    ? [
+        { label: 'Отправить заново', icon: RotateCw, onClick: () => void retryFailedItem(message.client_id!) },
+        { label: 'Удалить', icon: Trash2, onClick: () => void deleteOutboxItem(message.client_id!, message), danger: true as const },
+      ]
     : [];
 
   return (
     <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'} px-3 py-0.5`}>
       <div
         ref={bubbleRef}
-        {...(canActOn ? menu.triggerProps : {})}
+        {...(canActOn || canRetryOrDelete ? menu.triggerProps : {})}
         className={
           isVideoNote
             ? `select-none flex flex-col items-${isOwn ? 'end' : 'start'} ${showPendingDim ? 'opacity-60' : ''}`
@@ -328,6 +341,8 @@ export function MessageBubble({
           {message.edited_at && <span>изменено</span>}
           <span>{formatMessageTime(message.created_at)}</span>
           {isOwn && !isPending && <StatusTicks status={status} />}
+          {isOwn && isQueued && <Clock size={12} className="shrink-0 opacity-50" />}
+          {isOwn && isFailed && <AlertCircle size={12} className="shrink-0 text-red-500" />}
         </div>
       </div>
       {menu.position && bubbleRef.current && (

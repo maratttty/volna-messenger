@@ -14,13 +14,15 @@ import {
   fetchOwnMessageStatuses,
 } from '../lib/messages';
 import { loadMessagesCache, saveMessagesCache } from '../lib/messages-cache';
-import { uploadAttachmentWithProgress, UploadCancelledError } from '../lib/storage';
+import { uploadAttachmentWithProgress, UploadCancelledError, AttachmentTooLargeError, AttachmentTypeError } from '../lib/storage';
 import { onNetworkRecovery } from '../lib/network';
 import { playSendSound, playReceiveSound } from '../lib/sound';
 import { fetchReactions, groupReactions, setReaction, removeReaction } from '../lib/reactions';
+import { putOutboxItem, processOutboxQueue, rehydrateOutboxIntoChat } from '../lib/outbox';
 import { useMessageStore } from '../store/message-store';
 import { useChatStore } from '../store/chat-store';
 import { useUploadProgressStore } from '../store/upload-progress-store';
+import { useSendStatusStore } from '../store/send-status-store';
 import type { Message, MessageStatusValue, MessageType, ReactionSummary } from '../types/database';
 
 export function useMessages(chatId: string | null, currentUserId: string | undefined, hiddenBeforeAt?: string | null) {
@@ -90,6 +92,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         if (cancelled) return;
         setMessages(chatId, page, more);
         saveMessagesCache(currentUserId, chatId, page, more);
+        void rehydrateOutboxIntoChat(chatId);
         setFetchDone(true);
         // Persist the read cursor immediately (one fast row update) so that the
         // correct position survives a page refresh even if markChatRead is slow.
@@ -275,9 +278,23 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         const confirmed = await sendMessageApi({ chatId, senderId: currentUserId, content, clientId, replyToId });
         useMessageStore.getState().confirmMessage(chatId, clientId, confirmed);
         playSendSound();
-      } catch (err) {
-        useMessageStore.getState().removeMessage(chatId, optimistic.id);
-        throw err;
+      } catch {
+        // Keep the optimistic bubble — don't remove it and don't rethrow, so
+        // no error banner appears. It stays visible with a "queued" clock
+        // icon and is retried automatically by useOutboxProcessor.
+        useSendStatusStore.getState().setStatus(clientId, 'queued');
+        await putOutboxItem({
+          kind: 'text',
+          clientId,
+          chatId,
+          senderId: currentUserId,
+          content,
+          replyToId: replyToId ?? null,
+          createdAt: Date.now(),
+          attempts: 0,
+          status: 'queued',
+        });
+        void processOutboxQueue();
       } finally {
         pendingClientIds.current.delete(clientId);
       }
@@ -351,15 +368,43 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         });
         useMessageStore.getState().confirmMessage(chatId, clientId, confirmed);
         playSendSound();
-      } catch (err) {
-        useMessageStore.getState().removeMessage(chatId, optimistic.id);
-        // User-initiated cancel (the X button) — not a real failure, so no
-        // error should surface to MessageInput's catch/error-banner logic.
-        if (err instanceof UploadCancelledError) return;
-        throw err;
-      } finally {
         URL.revokeObjectURL(localUrl);
         useUploadProgressStore.getState().clearProgress(clientId);
+      } catch (err) {
+        useUploadProgressStore.getState().clearProgress(clientId);
+        // User-initiated cancel (the X button) — not a real failure, so no
+        // error should surface to MessageInput's catch/error-banner logic.
+        if (err instanceof UploadCancelledError) {
+          useMessageStore.getState().removeMessage(chatId, optimistic.id);
+          URL.revokeObjectURL(localUrl);
+          return;
+        }
+        // Validation errors (too large / blocked type) can't be fixed by
+        // retrying — fail immediately like before, don't queue them.
+        if (err instanceof AttachmentTooLargeError || err instanceof AttachmentTypeError) {
+          useMessageStore.getState().removeMessage(chatId, optimistic.id);
+          URL.revokeObjectURL(localUrl);
+          throw err;
+        }
+        // Anything else (network drop, server hiccup) — keep the bubble
+        // visible with a "queued" clock icon and let useOutboxProcessor
+        // retry it in the background, including across a page reload.
+        useSendStatusStore.getState().setStatus(clientId, 'queued');
+        await putOutboxItem({
+          kind: 'attachment',
+          clientId,
+          chatId,
+          senderId: currentUserId,
+          messageType: type,
+          file,
+          duration,
+          posterUrl,
+          replyToId: replyToId ?? null,
+          createdAt: Date.now(),
+          attempts: 0,
+          status: 'queued',
+        });
+        void processOutboxQueue();
       }
     },
     [chatId, currentUserId, appendMessage],
@@ -392,9 +437,21 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         const confirmed = await sendGifMessage({ chatId, senderId: currentUserId, clientId, gifUrl, title, replyToId });
         useMessageStore.getState().confirmMessage(chatId, clientId, confirmed);
         playSendSound();
-      } catch (err) {
-        useMessageStore.getState().removeMessage(chatId, optimistic.id);
-        throw err;
+      } catch {
+        useSendStatusStore.getState().setStatus(clientId, 'queued');
+        await putOutboxItem({
+          kind: 'gif',
+          clientId,
+          chatId,
+          senderId: currentUserId,
+          gifUrl,
+          title,
+          replyToId: replyToId ?? null,
+          createdAt: Date.now(),
+          attempts: 0,
+          status: 'queued',
+        });
+        void processOutboxQueue();
       }
     },
     [chatId, currentUserId, appendMessage],
