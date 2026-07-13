@@ -244,9 +244,9 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
             the voice-message cancel button, not the whole circle. Otherwise
             the usual play overlay. */}
         {uploading ? (
-          <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+          <span className="absolute inset-0 flex items-center justify-center bg-black/45">
             <span className="relative flex items-center justify-center" style={{ width: 56, height: 56 }}>
-              <CircularProgressRing progress={uploadProgress} size={56} strokeWidth={3} className="text-white" trackClassName="text-white/30" smooth />
+              <CircularProgressRing progress={uploadProgress} size={56} strokeWidth={3} className="text-white" trackClassName="text-white/30" smooth spinning />
               <X size={24} className="text-white drop-shadow" />
             </span>
           </span>

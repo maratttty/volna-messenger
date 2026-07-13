@@ -9,6 +9,10 @@ interface CircularProgressRingProps {
   // without it. Playback rings already update every rAF frame and stay off
   // by default — a transition there would make the ring visibly lag the video.
   smooth?: boolean;
+  // Telegram-style: the ring rotates continuously regardless of progress,
+  // while the arc length still reflects the real percentage underneath.
+  // Upload-only — playback rings don't spin.
+  spinning?: boolean;
 }
 
 // Overlay ring used for video-note playback/recording progress — absolutely
@@ -20,6 +24,7 @@ export function CircularProgressRing({
   className = 'text-accent',
   trackClassName = 'text-white/25',
   smooth = false,
+  spinning = false,
 }: CircularProgressRingProps) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -31,7 +36,7 @@ export function CircularProgressRing({
     <svg
       width={size}
       height={size}
-      className="pointer-events-none absolute inset-0 -rotate-90"
+      className={`pointer-events-none absolute inset-0 ${spinning ? 'anim-ring-spin' : '-rotate-90'}`}
       viewBox={`0 0 ${size} ${size}`}
     >
       <circle cx={center} cy={center} r={radius} strokeWidth={strokeWidth} fill="none" stroke="currentColor" className={trackClassName} />

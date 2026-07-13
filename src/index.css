@@ -81,12 +81,19 @@ body {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+/* Continuous upload-ring rotation, base -90deg offset preserved (arc starts
+   at 12 o'clock) so it composes with the real progress fill underneath. */
+@keyframes fw-ring-spin {
+  from { transform: rotate(-90deg); }
+  to   { transform: rotate(270deg); }
+}
 
 .anim-fade-in       { animation: fw-fade-in   0.18s ease-out both; }
 .anim-slide-up      { animation: fw-slide-up  0.2s  ease-out both; }
 .anim-slide-right   { animation: fw-slide-right 0.22s ease-out backwards; }
 .anim-pop           { animation: fw-pop       0.22s ease-out both; }
 .anim-msg           { animation: fw-msg       0.18s ease-out both; }
+.anim-ring-spin     { animation: fw-ring-spin 1.1s linear infinite; }
 
 /* Subtle press-down feedback on interactive elements (transform-only = GPU, no layout) */
 button:active:not(:disabled),

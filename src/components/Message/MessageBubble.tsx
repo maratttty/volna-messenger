@@ -65,7 +65,7 @@ function UploadCancelButton({
       className="relative flex items-center justify-center rounded-full"
       style={{ width: size, height: size }}
     >
-      <CircularProgressRing progress={progress} size={size} strokeWidth={3} className="text-white" trackClassName="text-white/30" smooth />
+      <CircularProgressRing progress={progress} size={size} strokeWidth={3} className="text-white" trackClassName="text-white/30" smooth spinning />
       <X size={Math.round(size * 0.45)} className="text-white" />
     </button>
   );
