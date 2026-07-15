@@ -1,5 +1,12 @@
 import { create } from 'zustand';
 
+// Fixed, non-advancing ring value used while a message sits in the offline
+// outbox (status 'queued') — there's no real byte-level progress to show
+// between send attempts, but the ring should still visibly spin so a queued
+// send never looks abandoned. Picked purely for how it looks (a partial arc
+// rotating), not a percentage.
+export const QUEUED_RING_PROGRESS = 0.25;
+
 // Keyed by the optimistic message's client_id, not chat_id/message_id — lets
 // each MessageBubble subscribe to only its own upload, so a progress tick
 // re-renders one bubble instead of the whole message list.

@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { Trash2, Send, Flashlight, FlashlightOff, ChevronLeft, ArrowUp, Lock } from 'lucide-react';
 import { CircularProgressRing } from '../ui/CircularProgressRing';
 
-const CIRCLE_SIZE = 260;
+const CIRCLE_SIZE = 300;
 const RING_WIDTH  = 5;
 const OUTER_SIZE  = CIRCLE_SIZE + RING_WIDTH * 2;
 

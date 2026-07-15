@@ -15,14 +15,14 @@ import {
 } from '../lib/messages';
 import { loadMessagesCache, saveMessagesCache } from '../lib/messages-cache';
 import { uploadAttachmentWithProgress, UploadCancelledError, AttachmentTooLargeError, AttachmentTypeError } from '../lib/storage';
+import { createUploadRingAnimator } from '../lib/upload-ring-animator';
 import { onNetworkRecovery } from '../lib/network';
 import { playSendSound, playReceiveSound } from '../lib/sound';
 import { fetchReactions, groupReactions, setReaction, removeReaction } from '../lib/reactions';
-import { putOutboxItem, processOutboxQueue, rehydrateOutboxIntoChat } from '../lib/outbox';
+import { queueOutboxItem, processOutboxQueue, rehydrateOutboxIntoChat, type OutboxItem } from '../lib/outbox';
 import { useMessageStore } from '../store/message-store';
 import { useChatStore } from '../store/chat-store';
-import { useUploadProgressStore } from '../store/upload-progress-store';
-import { useSendStatusStore } from '../store/send-status-store';
+import { useUploadProgressStore, QUEUED_RING_PROGRESS } from '../store/upload-progress-store';
 import type { Message, MessageStatusValue, MessageType, ReactionSummary } from '../types/database';
 
 export function useMessages(chatId: string | null, currentUserId: string | undefined, hiddenBeforeAt?: string | null) {
@@ -274,6 +274,26 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       };
       appendMessage(chatId, optimistic);
 
+      // Known-offline: don't even attempt the request — it would just hang
+      // until the browser's own connect timeout and burn a retry attempt for
+      // nothing. Go straight to "queued" and let useOutboxProcessor pick it
+      // up the moment the 'online' event fires.
+      if (!navigator.onLine) {
+        await queueOutboxItem({
+          kind: 'text',
+          clientId,
+          chatId,
+          senderId: currentUserId,
+          content,
+          replyToId: replyToId ?? null,
+          createdAt: Date.now(),
+          attempts: 0,
+          status: 'queued',
+        });
+        pendingClientIds.current.delete(clientId);
+        return;
+      }
+
       try {
         const confirmed = await sendMessageApi({ chatId, senderId: currentUserId, content, clientId, replyToId });
         useMessageStore.getState().confirmMessage(chatId, clientId, confirmed);
@@ -282,8 +302,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         // Keep the optimistic bubble — don't remove it and don't rethrow, so
         // no error banner appears. It stays visible with a "queued" clock
         // icon and is retried automatically by useOutboxProcessor.
-        useSendStatusStore.getState().setStatus(clientId, 'queued');
-        await putOutboxItem({
+        await queueOutboxItem({
           kind: 'text',
           clientId,
           chatId,
@@ -326,26 +345,45 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       };
       appendMessage(chatId, optimistic);
 
-      // Seed at 0 synchronously, before the XHR even starts — otherwise a
-      // small/fast upload (a short voice note, say) can complete before its
-      // first progress event fires, and the very first value this message's
-      // clientId ever gets in the store is 1 (done). That would skip the
-      // ring entirely. Seeding 0 guarantees at least one visible frame.
-      useUploadProgressStore.getState().setProgress(clientId, 0);
+      const outboxItem: OutboxItem = {
+        kind: 'attachment',
+        clientId,
+        chatId,
+        senderId: currentUserId,
+        messageType: type,
+        file,
+        duration,
+        posterUrl,
+        replyToId: replyToId ?? null,
+        createdAt: Date.now(),
+        attempts: 0,
+        status: 'queued',
+      };
+
+      // Known-offline: don't even attempt the upload — it would just hang
+      // until the browser's own connect timeout and burn a retry attempt for
+      // nothing. Go straight to "queued", ring spinning, and let
+      // useOutboxProcessor pick it up the moment the 'online' event fires.
+      if (!navigator.onLine) {
+        useUploadProgressStore.getState().setProgress(clientId, QUEUED_RING_PROGRESS);
+        await queueOutboxItem(outboxItem);
+        return;
+      }
+
+      // Drives the ring at a smooth, speed-capped pace instead of writing
+      // raw XHR ticks straight into the store — see upload-ring-animator.ts
+      // for why (invisible ring on tiny files, jerky snaps on big ones).
+      const ring = createUploadRingAnimator(clientId);
 
       const controller = new AbortController();
       useUploadProgressStore.getState().registerAbort(clientId, () => controller.abort());
 
-      // Throttled so a fast upload on a good connection doesn't fire dozens
-      // of re-renders per second — only the bubble subscribed to this
-      // clientId re-renders anyway, but no need to churn even that. The
-      // final 100% tick always goes through immediately (unthrottled).
-      let lastProgressAt = 0;
       const handleProgress = (fraction: number) => {
-        const now = Date.now();
-        if (fraction < 1 && now - lastProgressAt < 120) return;
-        lastProgressAt = now;
-        useUploadProgressStore.getState().setProgress(clientId, fraction);
+        if (fraction >= 1) {
+          ring.finish();
+        } else {
+          ring.setTarget(fraction);
+        }
       };
 
       try {
@@ -356,6 +394,7 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
           handleProgress,
           controller.signal,
         );
+        ring.finish();
         const confirmed = await sendAttachmentMessage({
           chatId,
           senderId: currentUserId,
@@ -369,12 +408,17 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         useMessageStore.getState().confirmMessage(chatId, clientId, confirmed);
         playSendSound();
         URL.revokeObjectURL(localUrl);
+        // Wait for the ring's sweep to actually finish on screen before
+        // clearing it — otherwise a fast confirm can cut the animation off
+        // mid-sweep and the ring would just vanish instead of completing.
+        await ring.completed;
         useUploadProgressStore.getState().clearProgress(clientId);
       } catch (err) {
-        useUploadProgressStore.getState().clearProgress(clientId);
+        ring.cancel();
         // User-initiated cancel (the X button) — not a real failure, so no
         // error should surface to MessageInput's catch/error-banner logic.
         if (err instanceof UploadCancelledError) {
+          useUploadProgressStore.getState().clearProgress(clientId);
           useMessageStore.getState().removeMessage(chatId, optimistic.id);
           URL.revokeObjectURL(localUrl);
           return;
@@ -382,28 +426,17 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
         // Validation errors (too large / blocked type) can't be fixed by
         // retrying — fail immediately like before, don't queue them.
         if (err instanceof AttachmentTooLargeError || err instanceof AttachmentTypeError) {
+          useUploadProgressStore.getState().clearProgress(clientId);
           useMessageStore.getState().removeMessage(chatId, optimistic.id);
           URL.revokeObjectURL(localUrl);
           throw err;
         }
         // Anything else (network drop, server hiccup) — keep the bubble
-        // visible with a "queued" clock icon and let useOutboxProcessor
-        // retry it in the background, including across a page reload.
-        useSendStatusStore.getState().setStatus(clientId, 'queued');
-        await putOutboxItem({
-          kind: 'attachment',
-          clientId,
-          chatId,
-          senderId: currentUserId,
-          messageType: type,
-          file,
-          duration,
-          posterUrl,
-          replyToId: replyToId ?? null,
-          createdAt: Date.now(),
-          attempts: 0,
-          status: 'queued',
-        });
+        // visible with the ring still spinning (queued) and let
+        // useOutboxProcessor retry it in the background, including across a
+        // page reload.
+        useUploadProgressStore.getState().setProgress(clientId, QUEUED_RING_PROGRESS);
+        await queueOutboxItem(outboxItem);
         void processOutboxQueue();
       }
     },
@@ -433,24 +466,30 @@ export function useMessages(chatId: string | null, currentUserId: string | undef
       };
       appendMessage(chatId, optimistic);
 
+      const outboxItem: OutboxItem = {
+        kind: 'gif',
+        clientId,
+        chatId,
+        senderId: currentUserId,
+        gifUrl,
+        title,
+        replyToId: replyToId ?? null,
+        createdAt: Date.now(),
+        attempts: 0,
+        status: 'queued',
+      };
+
+      if (!navigator.onLine) {
+        await queueOutboxItem(outboxItem);
+        return;
+      }
+
       try {
         const confirmed = await sendGifMessage({ chatId, senderId: currentUserId, clientId, gifUrl, title, replyToId });
         useMessageStore.getState().confirmMessage(chatId, clientId, confirmed);
         playSendSound();
       } catch {
-        useSendStatusStore.getState().setStatus(clientId, 'queued');
-        await putOutboxItem({
-          kind: 'gif',
-          clientId,
-          chatId,
-          senderId: currentUserId,
-          gifUrl,
-          title,
-          replyToId: replyToId ?? null,
-          createdAt: Date.now(),
-          attempts: 0,
-          status: 'queued',
-        });
+        await queueOutboxItem(outboxItem);
         void processOutboxQueue();
       }
     },

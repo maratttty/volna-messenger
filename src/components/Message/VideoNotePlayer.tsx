@@ -1,7 +1,8 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Play, Volume2, Eye, X } from 'lucide-react';
+import { Play, Volume2, Eye, X, Square } from 'lucide-react';
 import { CircularProgressRing } from '../ui/CircularProgressRing';
 import { usePlaybackStore } from '../../stores/playbackStore';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 interface VideoNotePlayerProps {
   src: string;
@@ -9,28 +10,54 @@ interface VideoNotePlayerProps {
   messageId: string;
   senderName: string;
   posterUrl?: string;
+  isOwn: boolean;
   uploadProgress?: number; // 0..1, only set while this message's attachment is still uploading
   onCancelUpload?: () => void;
 }
 
-const SIZE         = 200;
+const SIZE         = 240;
 const RING_PADDING = 5;
 const OUTER        = SIZE + RING_PADDING * 2;
+
+// Mobile only — how much the circle grows once the user taps to actually
+// play it (states b/c in the spec below).
+const EXPANDED_SCALE = 1.45;
+
+// Mobile only — the scrub bar overlay (state c). Inset far enough from the
+// edges that it stays inside the circular clip at this vertical position
+// (chord width shrinks near the bottom of a circle) instead of getting cut
+// off by the rounded-full mask around the video.
+const SEEK_BAR_INSET_X = 40;
+const SEEK_BAR_BOTTOM  = 38;
+
+// Mobile "not playing" state — three interaction states beyond idle:
+//  idle             -> (a) thin buffered-progress ring, tap starts playback
+//  expanded-playing -> (b) scaled up, playing
+//  expanded-paused  -> (c) scaled up, paused, scrub bar + stop button shown
+type MobileState = 'idle' | 'expanded-playing' | 'expanded-paused';
 
 function fmt(s: number) {
   const m = Math.floor(s / 60);
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 }
 
-export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, posterUrl, uploadProgress, onCancelUpload }: VideoNotePlayerProps) {
+export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, posterUrl, isOwn, uploadProgress, onCancelUpload }: VideoNotePlayerProps) {
   const videoRef   = useRef<HTMLVideoElement>(null);
-  const wrapperRef = useRef<HTMLButtonElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const seekBarRef = useRef<HTMLDivElement>(null);
+
+  const isMobile = useIsMobile();
 
   const [playing,     setPlaying]  = useState(false);
   const [localMuted,  setLocalMuted] = useState(true);
   const [viewed,      setViewed]   = useState(false);
   const [currentTime, setCurrent]  = useState(0);
   const [duration,    setDuration] = useState(durationSeconds ?? 0);
+  const [mobileState, setMobileState] = useState<MobileState>('idle');
+  // How much of the video is actually downloaded/playable so far — drives
+  // the idle-state ring (state a). Real data from the <video> element's
+  // buffered ranges, not a decorative animation.
+  const [bufferedFraction, setBufferedFraction] = useState(0);
   // True once the video has an actual decoded frame to show. Browsers hide
   // the native `poster` attribute as soon as play() is *called*, even before
   // any frame data has arrived — autoplay-on-mount then races the network
@@ -43,6 +70,7 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
   // video load — reset so the poster covers the new buffering gap too.
   useEffect(() => {
     setFrameReady(false);
+    setBufferedFraction(0);
   }, [src]);
 
   const isActive   = usePlaybackStore(s => s.messageId === messageId);
@@ -76,10 +104,15 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
 
     const onMeta  = () => { if (Number.isFinite(v.duration)) setDuration(v.duration); };
     const onFrame = () => setFrameReady(true);
+    const onBuffered = () => {
+      if (v.buffered.length === 0 || !Number.isFinite(v.duration) || v.duration === 0) return;
+      setBufferedFraction(Math.min(1, v.buffered.end(v.buffered.length - 1) / v.duration));
+    };
     const onEnded = () => {
       setPlaying(false);
       setCurrent(0);
       setViewed(true);
+      setMobileState('idle');
       if (usePlaybackStore.getState().messageId === messageId) deactivate();
     };
     const onPause = () => {
@@ -94,6 +127,8 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
     v.addEventListener('loadedmetadata', onMeta);
     v.addEventListener('loadeddata', onFrame);
     v.addEventListener('playing', onFrame);
+    v.addEventListener('progress', onBuffered);
+    v.addEventListener('canplay', onBuffered);
     v.addEventListener('ended',  onEnded);
     v.addEventListener('pause',  onPause);
     v.addEventListener('play',   onPlay);
@@ -101,6 +136,8 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
       v.removeEventListener('loadedmetadata', onMeta);
       v.removeEventListener('loadeddata', onFrame);
       v.removeEventListener('playing', onFrame);
+      v.removeEventListener('progress', onBuffered);
+      v.removeEventListener('canplay', onBuffered);
       v.removeEventListener('ended',  onEnded);
       v.removeEventListener('pause',  onPause);
       v.removeEventListener('play',   onPlay);
@@ -108,11 +145,13 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Reset muted when deactivated so next tap re-enters activate() ──
+  // ── Reset muted + mobile expand state when deactivated so next tap
+  //    re-enters activate() / starts from the idle circle again ──────
   const wasActiveRef = useRef(false);
   useEffect(() => {
     if (wasActiveRef.current && !isActive) {
       setLocalMuted(true);
+      setMobileState('idle');
       const v = videoRef.current;
       if (v) v.muted = true;
     }
@@ -138,6 +177,7 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
     setLocalMuted(false);
     activate(messageId, 'video_note', senderName, v);
     setPending(null);
+    if (isMobile) setMobileState('expanded-playing');
     v.play().catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPending]);
@@ -172,8 +212,8 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
     return () => obs.disconnect();
   }, [playing, uploadProgress]);
 
-  // ── Tap handler ─────────────────────────────────────────────────
-  const handleTap = useCallback(() => {
+  // ── Desktop tap handler — unchanged: click plays instantly in place ──
+  const handleDesktopTap = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
 
@@ -191,27 +231,114 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
     }
   }, [playing, activate, messageId, senderName]);
 
-  const progress  = duration > 0 ? currentTime / duration : 0;
-  const remaining = Math.max(0, duration - currentTime);
+  // ── Mobile tap handler — idle -> expanded-playing -> expanded-paused ──
+  // State flips synchronously here regardless of whether the video has
+  // buffered enough to actually start yet, so the tap always feels instant.
+  const handleMobileTap = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    if (mobileState === 'idle') {
+      v.muted       = false;
+      v.currentTime = 0;
+      setLocalMuted(false);
+      activate(messageId, 'video_note', senderName, v);
+      setMobileState('expanded-playing');
+      v.play().catch(() => {});
+    } else if (mobileState === 'expanded-playing') {
+      setMobileState('expanded-paused');
+      v.pause();
+    } else {
+      // expanded-paused, tap on the video body (not stop, not the scrub
+      // bar) — resume, same as any media player's tap-to-toggle.
+      setMobileState('expanded-playing');
+      v.play().catch(() => {});
+    }
+  }, [mobileState, activate, messageId, senderName]);
+
+  const handleStop = useCallback((e: React.SyntheticEvent) => {
+    e.stopPropagation();
+    const v = videoRef.current;
+    if (!v) return;
+    v.pause();
+    v.currentTime = 0;
+    setCurrent(0);
+    setMobileState('idle');
+  }, []);
+
+  const seekFromClientX = useCallback((clientX: number) => {
+    const el = seekBarRef.current;
+    const v  = videoRef.current;
+    if (!el || !v || !duration) return;
+    const rect = el.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    v.currentTime = frac * duration;
+    setCurrent(v.currentTime);
+  }, [duration]);
+
+  const handleSeekPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    seekFromClientX(e.clientX);
+  }, [seekFromClientX]);
+
+  const handleSeekPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.buttons !== 1) return;
+    e.stopPropagation();
+    seekFromClientX(e.clientX);
+  }, [seekFromClientX]);
+
   const uploading = uploadProgress !== undefined && uploadProgress < 1;
 
+  const handleClick = useCallback(() => {
+    if (uploading && onCancelUpload) { onCancelUpload(); return; }
+    if (isMobile) handleMobileTap(); else handleDesktopTap();
+  }, [uploading, onCancelUpload, isMobile, handleMobileTap, handleDesktopTap]);
+
+  const progress  = duration > 0 ? currentTime / duration : 0;
+  const remaining = Math.max(0, duration - currentTime);
+  const expanded  = isMobile && mobileState !== 'idle';
+  // Grow away from the screen edge the bubble is pinned to, not into it —
+  // own messages sit flush right, others flush left.
+  const transformOrigin = isOwn ? 'right center' : 'left center';
+
   return (
-    <button
+    <div
       ref={wrapperRef}
-      onClick={uploading && onCancelUpload ? onCancelUpload : handleTap}
-      className="relative select-none"
-      style={{ width: OUTER, height: OUTER }}
+      role="button"
+      tabIndex={0}
+      onClick={handleClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); } }}
+      className={`relative select-none transition-transform duration-200 ease-out ${expanded ? 'z-20' : ''}`}
+      style={{
+        width: OUTER,
+        height: OUTER,
+        transform: expanded ? `scale(${EXPANDED_SCALE})` : 'scale(1)',
+        transformOrigin,
+      }}
       aria-label="Видео-сообщение"
     >
-      {/* Playback ring only — around the whole circle, same as before. The
-          upload ring lives on the small centered cancel button below instead
-          (matching the voice-message style), not around the whole circle. */}
-      {!uploading && !effectiveMuted && (
+      {/* Playback ring (desktop only — mobile uses the buffered ring below
+          at rest, and the scrub bar once expanded, per the mobile spec). */}
+      {!isMobile && !uploading && !effectiveMuted && (
         <CircularProgressRing
           progress={progress}
           size={OUTER}
           strokeWidth={3}
           className="text-accent/70"
+        />
+      )}
+
+      {/* Mobile idle state (a) — thin, subtle ring showing real buffered
+          (download) progress, not decorative. */}
+      {isMobile && mobileState === 'idle' && !uploading && (
+        <CircularProgressRing
+          progress={bufferedFraction}
+          size={OUTER}
+          strokeWidth={2.5}
+          className="text-white/45"
+          trackClassName="text-white/10"
+          smooth
         />
       )}
 
@@ -246,12 +373,12 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
         {uploading ? (
           <span className="absolute inset-0 flex items-center justify-center bg-black/45">
             <span className="relative flex items-center justify-center" style={{ width: 56, height: 56 }}>
-              <CircularProgressRing progress={uploadProgress} size={56} strokeWidth={3} className="text-white" trackClassName="text-white/30" smooth spinning />
+              <CircularProgressRing progress={uploadProgress} size={56} strokeWidth={3} className="text-white" trackClassName="text-white/30" spinning />
               <X size={24} className="text-white drop-shadow" />
             </span>
           </span>
         ) : (
-          !playing && (
+          !playing && (!isMobile || mobileState === 'idle') && (
             <span className="absolute inset-0 flex items-center justify-center bg-black/20 transition-opacity duration-150">
               <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/40">
                 {effectiveMuted
@@ -263,18 +390,53 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
           )
         )}
 
-        {/* Duration / remaining, or upload % while sending */}
-        <span className="absolute bottom-2 right-2.5 rounded-full bg-black/50 px-1.5 py-0.5 text-[10px] font-medium text-white">
-          {uploading ? `${Math.round(uploadProgress * 100)}%` : fmt(playing || currentTime > 0 ? remaining : duration)}
-        </span>
+        {/* Mobile state (c) — scrub bar + stop button, shown once the
+            user's second tap pauses the enlarged playback. */}
+        {isMobile && mobileState === 'expanded-paused' && (
+          <span
+            className="absolute inset-0 flex items-center justify-center bg-black/45"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={handleStop}
+              aria-label="Остановить"
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition active:scale-90"
+            >
+              <Square size={18} className="fill-white" />
+            </button>
+            <div
+              ref={seekBarRef}
+              onPointerDown={handleSeekPointerDown}
+              onPointerMove={handleSeekPointerMove}
+              className="absolute h-4 cursor-pointer touch-none"
+              style={{ left: SEEK_BAR_INSET_X, right: SEEK_BAR_INSET_X, bottom: SEEK_BAR_BOTTOM - 6 }}
+            >
+              <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-white/25">
+                <div className="h-full rounded-full bg-white" style={{ width: `${progress * 100}%` }} />
+              </div>
+              <div
+                className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow"
+                style={{ left: `${progress * 100}%` }}
+              />
+            </div>
+          </span>
+        )}
+
+        {/* Duration / remaining, or upload % while sending — hidden once
+            expanded on mobile, the scrub bar takes over that role. */}
+        {(!isMobile || mobileState === 'idle') && (
+          <span className="absolute bottom-2 right-2.5 rounded-full bg-black/50 px-1.5 py-0.5 text-[10px] font-medium text-white">
+            {uploading ? `${Math.round(uploadProgress * 100)}%` : fmt(playing || currentTime > 0 ? remaining : duration)}
+          </span>
+        )}
 
         {/* "Viewed" badge */}
-        {viewed && !playing && (
+        {viewed && !playing && (!isMobile || mobileState === 'idle') && (
           <span className="absolute bottom-2 left-2.5 flex items-center gap-0.5 rounded-full bg-black/50 px-1.5 py-0.5 text-[10px] text-white">
             <Eye size={10} />
           </span>
         )}
       </span>
-    </button>
+    </div>
   );
 }

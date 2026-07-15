@@ -67,7 +67,7 @@ function UploadCancelButton({
       className="relative flex items-center justify-center rounded-full"
       style={{ width: size, height: size }}
     >
-      <CircularProgressRing progress={progress} size={size} strokeWidth={3} className="text-white" trackClassName="text-white/30" smooth spinning />
+      <CircularProgressRing progress={progress} size={size} strokeWidth={3} className="text-white" trackClassName="text-white/30" spinning />
       <X size={Math.round(size * 0.45)} className="text-white" />
     </button>
   );
@@ -76,11 +76,13 @@ function UploadCancelButton({
 function MessageContent({
   message,
   senderName,
+  isOwn,
   uploadProgress,
   onCancelUpload,
 }: {
   message: Message;
   senderName?: string;
+  isOwn: boolean;
   uploadProgress?: number;
   onCancelUpload?: () => void;
 }) {
@@ -171,6 +173,7 @@ function MessageContent({
           messageId={message.id}
           senderName={senderName ?? ''}
           posterUrl={message.attachment_meta?.posterUrl}
+          isOwn={isOwn}
           uploadProgress={uploadProgress}
           onCancelUpload={onCancelUpload}
         />
@@ -238,9 +241,14 @@ export function MessageBubble({
   // Gate on isPending too: once the message is confirmed, hide the ring
   // immediately even if the store's clearProgress() call hasn't landed yet.
   const uploadProgress = isPending ? rawUploadProgress : undefined;
+  // While queued there's no in-flight XHR to abort — tapping the ring's X
+  // instead drops the message from the offline queue, same as "Удалить" in
+  // the retry/delete menu below.
   const onCancelUpload =
     isPending && message.client_id
-      ? () => useUploadProgressStore.getState().cancelUpload(message.client_id!)
+      ? sendStatus === 'queued'
+        ? () => void deleteOutboxItem(message.client_id!, message)
+        : () => useUploadProgressStore.getState().cancelUpload(message.client_id!)
       : undefined;
   const isVideoNote = message.type === 'video_note';
   const isMedia = message.type === 'image' || message.type === 'file' || message.type === 'voice' || isVideoNote;
@@ -315,7 +323,7 @@ export function MessageBubble({
             <p className="truncate text-xs text-text-muted">{repliedPreviewText(repliedMessage)}</p>
           </button>
         )}
-        <MessageContent message={message} senderName={senderName} uploadProgress={uploadProgress} onCancelUpload={onCancelUpload} />
+        <MessageContent message={message} senderName={senderName} isOwn={isOwn} uploadProgress={uploadProgress} onCancelUpload={onCancelUpload} />
         {reactions && reactions.length > 0 && (
           <div className={`mt-1 flex flex-wrap gap-1 ${isVideoNote ? 'px-1' : ''}`}>
             {reactions.map((r) => (

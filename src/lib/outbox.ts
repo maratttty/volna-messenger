@@ -7,6 +7,7 @@ import { sendMessage, sendAttachmentMessage, sendGifMessage } from './messages';
 import { uploadAttachmentWithProgress, AttachmentTooLargeError, AttachmentTypeError } from './storage';
 import { useMessageStore } from '../store/message-store';
 import { useSendStatusStore } from '../store/send-status-store';
+import { useUploadProgressStore, QUEUED_RING_PROGRESS } from '../store/upload-progress-store';
 import { playSendSound } from './sound';
 
 const DB_NAME = 'freeword-outbox';
@@ -57,6 +58,14 @@ async function withStore<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore
 
 export async function putOutboxItem(item: OutboxItem): Promise<void> {
   await withStore('readwrite', (store) => store.put(item));
+}
+
+// Used by the initial send attempt (useMessages.ts) when it gives up on a
+// message and hands it off to the background queue — persists the item and
+// flips its status badge in one call, so callers don't repeat both steps.
+export async function queueOutboxItem(item: OutboxItem): Promise<void> {
+  useSendStatusStore.getState().setStatus(item.clientId, 'queued');
+  await putOutboxItem(item);
 }
 
 export async function removeOutboxItem(clientId: string): Promise<void> {
@@ -116,6 +125,7 @@ async function retryItem(item: OutboxItem): Promise<boolean> {
     useMessageStore.getState().confirmMessage(item.chatId, item.clientId, confirmed);
     playSendSound();
     useSendStatusStore.getState().clearStatus(item.clientId);
+    useUploadProgressStore.getState().clearProgress(item.clientId);
     await removeOutboxItem(item.clientId);
     return true;
   } catch (err) {
@@ -126,6 +136,14 @@ async function retryItem(item: OutboxItem): Promise<boolean> {
     const status: OutboxStatus = nonRetryable || attempts >= MAX_ATTEMPTS ? 'failed' : 'queued';
     await updateOutboxItem(item.clientId, { status, attempts });
     useSendStatusStore.getState().setStatus(item.clientId, status);
+    // 'failed' is terminal (until the user taps "retry") — stop the ring so
+    // it doesn't keep spinning next to the red icon. 'queued' keeps spinning:
+    // it's just this one attempt that failed, more retries are coming.
+    if (status === 'failed') {
+      useUploadProgressStore.getState().clearProgress(item.clientId);
+    } else {
+      useUploadProgressStore.getState().setProgress(item.clientId, QUEUED_RING_PROGRESS);
+    }
     return false;
   } finally {
     inFlight.delete(item.clientId);
@@ -135,6 +153,11 @@ async function retryItem(item: OutboxItem): Promise<boolean> {
 // Attempts every currently-queued item once. Returns true if at least one
 // succeeded (the caller uses that to reset its backoff delay).
 export async function processOutboxQueue(): Promise<boolean> {
+  // While genuinely offline, don't spend attempts at all — there's nothing
+  // to retry against, and each attempt would just hang until the browser's
+  // own connect timeout before failing. useOutboxProcessor's 'online'
+  // listener re-triggers this the instant connectivity actually returns.
+  if (!navigator.onLine) return false;
   const items = (await getAllOutboxItems()).filter((i) => i.status === 'queued');
   if (items.length === 0) return false;
   const results = await Promise.all(items.map(retryItem));
@@ -144,12 +167,14 @@ export async function processOutboxQueue(): Promise<boolean> {
 export async function retryFailedItem(clientId: string): Promise<void> {
   await updateOutboxItem(clientId, { status: 'queued', attempts: 0 });
   useSendStatusStore.getState().setStatus(clientId, 'queued');
+  useUploadProgressStore.getState().setProgress(clientId, QUEUED_RING_PROGRESS);
   void processOutboxQueue();
 }
 
 export async function deleteOutboxItem(clientId: string, message: Message): Promise<void> {
   await removeOutboxItem(clientId);
   useSendStatusStore.getState().clearStatus(clientId);
+  useUploadProgressStore.getState().clearProgress(clientId);
   useMessageStore.getState().removeMessage(message.chat_id, message.id);
   if (message.attachment_url?.startsWith('blob:')) URL.revokeObjectURL(message.attachment_url);
 }
@@ -210,5 +235,11 @@ export async function rehydrateOutboxIntoChat(chatId: string): Promise<void> {
   for (const item of items) {
     useMessageStore.getState().appendMessage(chatId, outboxItemToMessage(item));
     useSendStatusStore.getState().setStatus(item.clientId, item.status);
+    // The upload-progress store is in-memory only and doesn't survive a
+    // reload — re-seed it so a still-queued attachment's ring resumes
+    // spinning immediately instead of only reappearing on the next retry.
+    if (item.kind === 'attachment' && item.status === 'queued') {
+      useUploadProgressStore.getState().setProgress(item.clientId, QUEUED_RING_PROGRESS);
+    }
   }
 }
