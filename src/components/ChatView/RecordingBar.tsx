@@ -16,6 +16,14 @@ function formatTimer(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+// elapsedSeconds already updates every animation frame (see useAudioRecorder)
+// — this just exposes that sub-second precision visually, so the timer reads
+// as continuously ticking rather than jumping once a second.
+function formatCentiseconds(seconds: number): string {
+  const centis = Math.floor((seconds % 1) * 100);
+  return centis.toString().padStart(2, '0');
+}
+
 const LEVEL_BAR_COUNT = 20;
 
 function LevelBars({ stream }: { stream: MediaStream | null }) {
@@ -67,9 +75,10 @@ export function RecordingBar({
         </button>
       )}
 
-      <span className="flex items-center gap-2 text-sm text-red-400">
+      <span className="flex items-center gap-2 text-sm text-red-400 tabular-nums">
         <span className="h-2 w-2 animate-pulse rounded-full bg-red-400" />
         {formatTimer(elapsedSeconds)}
+        <span className="text-xs opacity-60">.{formatCentiseconds(elapsedSeconds)}</span>
       </span>
 
       <LevelBars stream={audioStream} />

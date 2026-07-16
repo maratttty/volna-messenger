@@ -1,5 +1,6 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Mic, Video, Send, Lock } from 'lucide-react';
+import { Mic, Video, Lock, Square } from 'lucide-react';
+import { useAudioLevel } from '../../hooks/useAudioLevel';
 
 const HOLD_THRESHOLD_MS = 200;
 export const CANCEL_THRESHOLD_PX = 80;
@@ -8,6 +9,7 @@ export const LOCK_THRESHOLD_PX = 60;
 interface RecordButtonProps {
   mode: 'voice' | 'video';
   locked: boolean;
+  stream: MediaStream | null;
   onToggleMode: () => void;
   onHoldStart: () => void;
   onHoldMove: (deltaX: number, deltaY: number) => void;
@@ -20,6 +22,7 @@ interface RecordButtonProps {
 export function RecordButton({
   mode,
   locked,
+  stream,
   onToggleMode,
   onHoldStart,
   onHoldMove,
@@ -29,6 +32,10 @@ export function RecordButton({
   disabled,
 }: RecordButtonProps) {
   const [holding, setHolding] = useState(false);
+  // Live mic level for the Siri-style halo below — cheap to call
+  // unconditionally, useAudioLevel no-ops (level 0, no AudioContext) while
+  // stream is null (idle, or locked/video mode where the halo isn't shown).
+  const level = useAudioLevel(holding ? stream : null);
   const [lockHint, setLockHint] = useState(0); // 0..1, how close to locking
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startXRef = useRef(0);
@@ -102,10 +109,10 @@ export function RecordButton({
     return (
       <button
         onClick={onSendLocked}
-        title="Отправить"
+        title="Остановить и отправить"
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-bg transition hover:bg-accent-hover"
       >
-        <Send size={18} />
+        <Square size={16} className="fill-bg" />
       </button>
     );
   }
@@ -129,12 +136,28 @@ export function RecordButton({
         onPointerCancel={handlePointerCancel}
         disabled={disabled}
         title={mode === 'voice' ? 'Голосовое сообщение (тап — сменить на видео)' : 'Видео-кружок (тап — сменить на голос)'}
-        className={`flex h-10 w-10 shrink-0 select-none items-center justify-center rounded-full transition ${
+        className={`relative flex h-10 w-10 shrink-0 select-none items-center justify-center rounded-full transition ${
           holding ? 'scale-110 bg-red-500 text-white' : 'bg-accent text-bg hover:bg-accent-hover'
         } disabled:opacity-50`}
         style={{ touchAction: 'none' }}
       >
-        <Icon size={18} />
+        {/* Siri-style halo — reacts to live mic level, expands/fades with
+            volume. Same size as the button at silence (invisible), grows
+            and brightens as the user speaks. Smoothed by the CSS transition
+            rather than snapping to each ~16ms level reading. */}
+        {holding && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-1/2 rounded-full bg-white blur-[2px] transition-[transform,opacity] duration-100 ease-out"
+            style={{
+              width: 40,
+              height: 40,
+              transform: `translate(-50%, -50%) scale(${1 + level * 1.3})`,
+              opacity: Math.min(0.55, level * 0.7),
+            }}
+          />
+        )}
+        <Icon size={18} className="relative z-10" />
       </button>
     </div>
   );

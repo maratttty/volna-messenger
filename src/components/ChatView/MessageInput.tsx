@@ -350,6 +350,7 @@ export function MessageInput({
           <RecordButton
             mode={mode}
             locked={locked}
+            stream={active.stream}
             onToggleMode={() => setMode((m) => (m === 'voice' ? 'video' : 'voice'))}
             onHoldStart={handleHoldStart}
             onHoldMove={handleHoldMove}

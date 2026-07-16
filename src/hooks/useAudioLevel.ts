@@ -13,6 +13,11 @@ export function useAudioLevel(stream: MediaStream | null): number {
     }
 
     const audioContext = new AudioContext();
+    // iOS Safari sometimes hands back a new AudioContext already 'suspended'
+    // even after the getUserMedia permission gesture — silently, no error,
+    // it just never produces data. Without this the halo/level bars would
+    // sit frozen at 0 on iOS specifically.
+    if (audioContext.state === 'suspended') void audioContext.resume();
     const source = audioContext.createMediaStreamSource(stream);
     const analyser = audioContext.createAnalyser();
     analyser.fftSize = 256;
