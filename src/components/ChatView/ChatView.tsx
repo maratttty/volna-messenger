@@ -493,7 +493,7 @@ export function ChatView({ chat, chats, currentUserId, currentUserDisplayName, c
 
       <div
         className="relative flex-1 flex flex-col overflow-hidden"
-        style={{ background: 'linear-gradient(165deg, #c8e8f5 0%, #b4e8de 100%)' }}
+        style={{ background: 'linear-gradient(165deg, var(--chat-wallpaper-from) 0%, var(--chat-wallpaper-to) 100%)' }}
       >
         <ChatWallpaper />
         <MessageList

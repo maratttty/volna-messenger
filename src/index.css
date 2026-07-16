@@ -15,6 +15,43 @@
 
 :root {
   color-scheme: light;
+  /* Chat wallpaper gradient — not a Tailwind design-token color (no utility
+     classes needed for it), so it lives here rather than in @theme above.
+     Consumed via var() from the inline style in ChatView.tsx. */
+  --chat-wallpaper-from: #c8e8f5;
+  --chat-wallpaper-to: #b4e8de;
+}
+
+/* Dark theme — applied via data-theme="dark" on <html>, set by the inline
+   script in index.html (before first paint) and src/lib/theme.ts (on
+   toggle / OS change). Overriding the custom properties here is all that's
+   needed for the rest of the app: every component already reads colors
+   through these variables (bg-bg, text-text, etc.) rather than raw Tailwind
+   palette classes, so they pick this up automatically — no per-component
+   dark: variants required. Palette loosely follows Telegram's dark theme;
+   --color-accent/--color-accent-hover are intentionally NOT overridden —
+   same brand color in both themes. */
+[data-theme="dark"] {
+  --color-bg: #0e1621;
+  --color-surface: #17212b;
+  --color-surface-hover: #202b36;
+  --color-border: #26333f;
+  --color-text: #e9edf1;
+  --color-text-muted: #8296a8;
+  /* Both were light/white in the light theme — kept as "light islands" here
+     would be unreadable against a dark bg with light --color-text on top. */
+  --color-bubble-out: #2b5c54;
+  --color-bubble-in: #1f2c34;
+  --chat-wallpaper-from: #0e1621;
+  --chat-wallpaper-to: #17212b;
+  color-scheme: dark;
+}
+
+/* Smooth theme toggle — animates the swap instead of snapping. Automatically
+   shortened to ~0 by the prefers-reduced-motion block further down, same as
+   every other animation in this file. */
+*, *::before, *::after {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 html,

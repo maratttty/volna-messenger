@@ -5,8 +5,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { updateProfile, checkUsernameAvailable } from '../lib/auth';
 import { uploadAttachment } from '../lib/storage';
 import { isSoundEnabled, setSoundEnabled } from '../lib/sound';
+import { useThemeStore } from '../store/theme-store';
+import type { ThemePreference } from '../lib/theme';
 import { Avatar } from '../components/ui/Avatar';
 import { Spinner } from '../components/ui/Spinner';
+
+const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
+  { value: 'light', label: 'Светлая' },
+  { value: 'dark', label: 'Тёмная' },
+  { value: 'system', label: 'Системная' },
+];
 
 const USERNAME_RE = /^[a-z0-9_]{3,32}$/;
 
@@ -21,6 +29,8 @@ export default function Settings() {
   const [showLastSeen, setShowLastSeen] = useState(profile?.show_last_seen ?? true);
   const [togglingLastSeen, setTogglingLastSeen] = useState(false);
   const [soundsEnabled, setSoundsEnabled] = useState(isSoundEnabled());
+  const themePreference = useThemeStore((s) => s.preference);
+  const setThemePreference = useThemeStore((s) => s.setPreference);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(profile?.avatar_url ?? null);
   const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
   const [usernameError, setUsernameError] = useState<string | null>(null);
@@ -187,6 +197,25 @@ export default function Settings() {
             {saving && <Spinner className="h-4 w-4" />}
             {saving ? 'Сохраняем…' : 'Сохранить'}
           </button>
+
+          <div className="border-t border-border pt-4">
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">Тема</p>
+            <div className="flex rounded-lg border border-border bg-surface p-1">
+              {THEME_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setThemePreference(opt.value)}
+                  className={`flex-1 rounded-md px-2 py-2 text-sm font-medium transition-colors ${
+                    themePreference === opt.value
+                      ? 'bg-accent text-bg'
+                      : 'text-text-muted hover:text-text'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="border-t border-border pt-4">
             <p className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">Звуки</p>
