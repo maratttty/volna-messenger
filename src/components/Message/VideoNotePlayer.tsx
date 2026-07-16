@@ -10,7 +10,6 @@ interface VideoNotePlayerProps {
   messageId: string;
   senderName: string;
   posterUrl?: string;
-  isOwn: boolean;
   uploadProgress?: number; // 0..1, only set while this message's attachment is still uploading
   onCancelUpload?: () => void;
 }
@@ -22,13 +21,22 @@ const OUTER        = SIZE + RING_PADDING * 2;
 // Mobile only — how much the circle grows once the user taps to actually
 // play it (states b/c in the spec below).
 const EXPANDED_SCALE = 1.45;
+const EXPANDED_OUTER = OUTER * EXPANDED_SCALE;
+
+// The video circle and scrub bar are sized in % of the wrapper rather than
+// fixed px — see the width/height transition on the wrapper below. Keeping
+// them as a percentage of the same box that's actually transitioning is what
+// makes the video, ring padding and scrub bar all grow in lockstep with the
+// one CSS transition, instead of needing a second, separately-timed animation.
+const RING_INSET_PCT = (RING_PADDING / OUTER) * 100;
 
 // Mobile only — the scrub bar overlay (state c). Inset far enough from the
 // edges that it stays inside the circular clip at this vertical position
 // (chord width shrinks near the bottom of a circle) instead of getting cut
-// off by the rounded-full mask around the video.
-const SEEK_BAR_INSET_X = 40;
-const SEEK_BAR_BOTTOM  = 38;
+// off by the rounded-full mask around the video. Expressed as % of the video
+// circle (SIZE) so it stays correctly placed at the expanded size too.
+const SEEK_BAR_INSET_PCT  = (40 / SIZE) * 100;
+const SEEK_BAR_BOTTOM_PCT = (38 / SIZE) * 100;
 
 // Mobile "not playing" state — three interaction states beyond idle:
 //  idle             -> (a) thin buffered-progress ring, tap starts playback
@@ -41,7 +49,7 @@ function fmt(s: number) {
   return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 }
 
-export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, posterUrl, isOwn, uploadProgress, onCancelUpload }: VideoNotePlayerProps) {
+export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, posterUrl, uploadProgress, onCancelUpload }: VideoNotePlayerProps) {
   const videoRef   = useRef<HTMLVideoElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const seekBarRef = useRef<HTMLDivElement>(null);
@@ -298,9 +306,6 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
   const progress  = duration > 0 ? currentTime / duration : 0;
   const remaining = Math.max(0, duration - currentTime);
   const expanded  = isMobile && mobileState !== 'idle';
-  // Grow away from the screen edge the bubble is pinned to, not into it —
-  // own messages sit flush right, others flush left.
-  const transformOrigin = isOwn ? 'right center' : 'left center';
 
   return (
     <div
@@ -309,12 +314,10 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
       tabIndex={0}
       onClick={handleClick}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); } }}
-      className={`relative select-none transition-transform duration-200 ease-out ${expanded ? 'z-20' : ''}`}
+      className="relative select-none transition-[width,height] duration-200 ease-out"
       style={{
-        width: OUTER,
-        height: OUTER,
-        transform: expanded ? `scale(${EXPANDED_SCALE})` : 'scale(1)',
-        transformOrigin,
+        width: expanded ? EXPANDED_OUTER : OUTER,
+        height: expanded ? EXPANDED_OUTER : OUTER,
       }}
       aria-label="Видео-сообщение"
     >
@@ -345,7 +348,7 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
       {/* Video clipped to circle */}
       <span
         className="absolute overflow-hidden rounded-full bg-black"
-        style={{ inset: RING_PADDING, width: SIZE, height: SIZE }}
+        style={{ inset: `${RING_INSET_PCT}%` }}
       >
         <video
           ref={videoRef}
@@ -409,7 +412,11 @@ export function VideoNotePlayer({ src, durationSeconds, messageId, senderName, p
               onPointerDown={handleSeekPointerDown}
               onPointerMove={handleSeekPointerMove}
               className="absolute h-4 cursor-pointer touch-none"
-              style={{ left: SEEK_BAR_INSET_X, right: SEEK_BAR_INSET_X, bottom: SEEK_BAR_BOTTOM - 6 }}
+              style={{
+                left: `${SEEK_BAR_INSET_PCT}%`,
+                right: `${SEEK_BAR_INSET_PCT}%`,
+                bottom: `calc(${SEEK_BAR_BOTTOM_PCT}% - 6px)`,
+              }}
             >
               <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-white/25">
                 <div className="h-full rounded-full bg-white" style={{ width: `${progress * 100}%` }} />

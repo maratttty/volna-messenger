@@ -76,13 +76,11 @@ function UploadCancelButton({
 function MessageContent({
   message,
   senderName,
-  isOwn,
   uploadProgress,
   onCancelUpload,
 }: {
   message: Message;
   senderName?: string;
-  isOwn: boolean;
   uploadProgress?: number;
   onCancelUpload?: () => void;
 }) {
@@ -173,7 +171,6 @@ function MessageContent({
           messageId={message.id}
           senderName={senderName ?? ''}
           posterUrl={message.attachment_meta?.posterUrl}
-          isOwn={isOwn}
           uploadProgress={uploadProgress}
           onCancelUpload={onCancelUpload}
         />
@@ -323,7 +320,7 @@ export function MessageBubble({
             <p className="truncate text-xs text-text-muted">{repliedPreviewText(repliedMessage)}</p>
           </button>
         )}
-        <MessageContent message={message} senderName={senderName} isOwn={isOwn} uploadProgress={uploadProgress} onCancelUpload={onCancelUpload} />
+        <MessageContent message={message} senderName={senderName} uploadProgress={uploadProgress} onCancelUpload={onCancelUpload} />
         {reactions && reactions.length > 0 && (
           <div className={`mt-1 flex flex-wrap gap-1 ${isVideoNote ? 'px-1' : ''}`}>
             {reactions.map((r) => (
