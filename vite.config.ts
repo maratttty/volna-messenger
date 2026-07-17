@@ -10,6 +10,16 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Switched from the default generateSW to a custom service worker
+      // (src/sw.ts) — generateSW has no insertion point for the push
+      // notification handlers being added on top of it. See src/sw.ts for
+      // the 1:1 reproduction of the old generated caching behavior.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+      },
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'freeword-icon.svg'],
       manifest: {
         name: 'Freeword',
@@ -45,16 +55,6 @@ export default defineConfig({
             purpose: 'maskable',
           },
         ],
-      },
-      workbox: {
-        skipWaiting: true,
-        clientsClaim: true,
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/rest\//, /^\/auth\//, /^\/storage\//],
-        // Supabase Storage (audio/video) intentionally NOT cached:
-        // CacheFirst breaks Safari iOS HTTP range requests → 30-second playback delay.
-        // Media files have their own CDN caching at the Supabase level.
       },
     }),
   ],

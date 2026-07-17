@@ -6,6 +6,11 @@ export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? '';
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
 export const GIPHY_API_KEY = import.meta.env.VITE_GIPHY_API_KEY ?? '';
 
+// Web Push — public by design (sent as-is in every subscription request, not
+// a secret). The matching private key lives only as a future Edge Function
+// secret, never in frontend config.
+export const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? '';
+
 // Spec §5.6: server-enforced limits on message content and attachments.
 export const MAX_MESSAGE_LENGTH = 4000;
 export const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB

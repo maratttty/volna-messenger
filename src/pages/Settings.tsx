@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useRef, useState, useEffect, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Camera } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,6 +7,14 @@ import { uploadAttachment } from '../lib/storage';
 import { isSoundEnabled, setSoundEnabled } from '../lib/sound';
 import { useThemeStore } from '../store/theme-store';
 import type { ThemePreference } from '../lib/theme';
+import {
+  isPushSupported,
+  isIosNonStandalone,
+  isCurrentlySubscribed,
+  subscribeToPush,
+  unsubscribeFromPush,
+  type SubscribeResult,
+} from '../lib/push';
 import { Avatar } from '../components/ui/Avatar';
 import { Spinner } from '../components/ui/Spinner';
 
@@ -17,6 +25,21 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
 ];
 
 const USERNAME_RE = /^[a-z0-9_]{3,32}$/;
+
+function notificationErrorMessage(reason: Exclude<SubscribeResult, { ok: true }>['reason']): string {
+  switch (reason) {
+    case 'ios-needs-install':
+      return 'На iPhone/iPad уведомления работают только после установки приложения на домашний экран (Поделиться → «На экран Домой»).';
+    case 'unsupported':
+      return 'Этот браузер не поддерживает push-уведомления.';
+    case 'denied':
+      return 'Уведомления заблокированы в браузере. Включите их вручную в настройках сайта, затем попробуйте снова.';
+    case 'dismissed':
+      return 'Разрешение не было получено. Попробуйте включить ещё раз.';
+    case 'error':
+      return 'Не удалось включить уведомления. Попробуйте ещё раз.';
+  }
+}
 
 export default function Settings() {
   const { session, profile, refreshProfile, signOut } = useAuth();
@@ -31,6 +54,11 @@ export default function Settings() {
   const [soundsEnabled, setSoundsEnabled] = useState(isSoundEnabled());
   const themePreference = useThemeStore((s) => s.preference);
   const setThemePreference = useThemeStore((s) => s.setPreference);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [togglingNotifications, setTogglingNotifications] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const pushUnavailable = !isPushSupported();
+  const pushNeedsIosInstall = isIosNonStandalone();
   const [avatarPreview, setAvatarPreview] = useState<string | null>(profile?.avatar_url ?? null);
   const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
   const [usernameError, setUsernameError] = useState<string | null>(null);
@@ -38,6 +66,13 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Reflects the real browser subscription state, not a separate localStorage
+  // flag — so a stale/already-subscribed state (e.g. after a reload) shows
+  // correctly instead of letting the user create a duplicate on next toggle.
+  useEffect(() => {
+    void isCurrentlySubscribed().then(setNotificationsEnabled);
+  }, []);
 
   if (!session || !profile) return null;
 
@@ -87,6 +122,27 @@ export default function Settings() {
       setShowLastSeen(!next);
     } finally {
       setTogglingLastSeen(false);
+    }
+  }
+
+  async function handleToggleNotifications() {
+    setNotificationsError(null);
+    setTogglingNotifications(true);
+    try {
+      if (notificationsEnabled) {
+        await unsubscribeFromPush(session!.user.id);
+        setNotificationsEnabled(false);
+        return;
+      }
+      const result = await subscribeToPush(session!.user.id);
+      if (result.ok) {
+        setNotificationsEnabled(true);
+      } else {
+        setNotificationsEnabled(false);
+        setNotificationsError(notificationErrorMessage(result.reason));
+      }
+    } finally {
+      setTogglingNotifications(false);
     }
   }
 
@@ -215,6 +271,30 @@ export default function Settings() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="border-t border-border pt-4">
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-text-muted">Уведомления</p>
+            <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-text">Push-уведомления</p>
+                <p className="mt-0.5 text-xs text-text-muted">
+                  {pushNeedsIosInstall
+                    ? 'На iPhone/iPad — только после установки на домашний экран'
+                    : pushUnavailable
+                    ? 'Этот браузер не поддерживает уведомления'
+                    : 'Уведомления о новых сообщениях, когда приложение закрыто'}
+                </p>
+              </div>
+              <button
+                onClick={() => void handleToggleNotifications()}
+                disabled={togglingNotifications || pushUnavailable}
+                className={`relative ml-4 h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 ${notificationsEnabled ? 'bg-accent' : 'bg-border'}`}
+              >
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${notificationsEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+            {notificationsError && <p className="mt-2 text-xs text-red-400">{notificationsError}</p>}
           </div>
 
           <div className="border-t border-border pt-4">
